@@ -44,7 +44,6 @@ export function DrawScreen() {
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const {updateItemPixels} = useSlideshowState();
   const [status, setStatus] = useState('Tap a pixel to paint it, then Send.');
-  const [debug, setDebug] = useState('');
   const [busy, setBusy] = useState(false);
   const [rgbModalVisible, setRgbModalVisible] = useState(false);
   // Scroll lock during a paint drag (Oct 30, 2026): the grid
@@ -131,9 +130,7 @@ export function DrawScreen() {
         onPixelPress={paint}
         onDragStart={() => setScrollEnabled(false)}
         onDragEnd={() => setScrollEnabled(true)}
-        onDebug={setDebug}
       />
-      {debug ? <Text style={styles.debug}>{debug}</Text> : null}
       {/* Draw / Erase toggle (Oct 30, 2026 cleanup): a compact
           segmented toggle with icons, replacing the old
           full-width Eraser button, with the Clear action as an
@@ -299,7 +296,6 @@ const styles = StyleSheet.create({
   screen: {flex: 1},
   container: {padding: 16, alignItems: 'center'},
   status: {fontSize: 16, marginBottom: 12, textAlign: 'center'},
-  debug: {fontSize: 12, marginTop: 8, textAlign: 'center', color: '#333'},
   editBanner: {
     width: '100%',
     backgroundColor: '#eaf3ff',

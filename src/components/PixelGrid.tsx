@@ -1,5 +1,5 @@
 import React, {useRef} from 'react';
-import {StyleSheet, View} from 'react-native';
+import {Platform, StatusBar, StyleSheet, View} from 'react-native';
 import type {RGB} from '../conversion/convert';
 
 export function rgbToCss([r, g, b]: RGB): string {
@@ -14,15 +14,6 @@ interface PixelGridProps {
   /** Called when a paint gesture starts / ends, so a parent ScrollView can lock scrolling during the drag. */
   onDragStart?: () => void;
   onDragEnd?: () => void;
-  /**
-   * Diagnostic only (Oct 31, 2026, Android off-by-one): called
-   * on gesture grant with the raw numbers behind the paint
-   * decision, so a device tap can settle whether pageY or
-   * the measured origin is off, instead of guessing. Does
-   * NOT change painting: the painted index is computed
-   * exactly as before.
-   */
-  onDebug?: (info: string) => void;
 }
 
 /**
@@ -50,6 +41,25 @@ interface PixelGridProps {
  * valid for the whole drag. If measuring has not completed
  * yet, locationX/Y are used as a fallback rather than
  * painting nothing.
+ *
+ * Android, Oct 31, 2026: pageY and measureInWindow do NOT
+ * share a coordinate system on Android. Diagnostic taps
+ * (Samsung A15, diag build 05272f3) proved it exactly:
+ * top-left centre tap gave pageY - originY = 35.76 for a
+ * true offset of 10.66 (locationY, cell-relative), and a
+ * row-8 centre tap gave 194.51 for a true offset of
+ * 169.41 — both excesses reduce to the same 25.10 once
+ * the finger's position inside the cell (locationY) is
+ * subtracted, while X was exact both times (excess
+ * +0.98 / -1.22, pure finger placement). So pageY runs
+ * ~25 higher than measureInWindow, the status-bar height,
+ * and every tap painted one row low. The fix is to
+ * subtract StatusBar.currentHeight from pageY on Android
+ * only; iOS shares the window system, so it is untouched
+ * (currentHeight is undefined there, and the Platform
+ * guard keeps it 0 regardless). Do NOT "fix" this by
+ * shifting a row, and do NOT revert to locationX/Y — the
+ * Oct 30 bug proved location is cell-relative.
  */
 export function PixelGrid({
   pixels,
@@ -57,7 +67,6 @@ export function PixelGrid({
   onPixelPress,
   onDragStart,
   onDragEnd,
-  onDebug,
 }: PixelGridProps) {
   const lastIndexRef = useRef<number | null>(null);
   const gridRef = useRef<View | null>(null);
@@ -83,8 +92,16 @@ export function PixelGrid({
     if (!origin || !onPixelPress) {
       return;
     }
+    // Android status-bar offset (Oct 31, 2026, see header):
+    // pageY is ~25 higher than measureInWindow's system,
+    // X is unaffected. Subtract it before dividing, or
+    // every tap paints one row low. iOS: 0.
+    const adjustedY =
+      Platform.OS === 'android'
+        ? pageY - (StatusBar.currentHeight ?? 0)
+        : pageY;
     const col = Math.floor((pageX - origin.x) / cellSize);
-    const row = Math.floor((pageY - origin.y) / cellSize);
+    const row = Math.floor((adjustedY - origin.y) / cellSize);
     if (col < 0 || col >= 16 || row < 0 || row >= 16) {
       return;
     }
@@ -94,27 +111,6 @@ export function PixelGrid({
     }
     lastIndexRef.current = index;
     onPixelPress(index);
-  }
-
-  function debugTap(
-    pageX: number,
-    pageY: number,
-    locationX: number,
-    locationY: number,
-  ) {
-    if (!onDebug) {
-      return;
-    }
-    const origin = gridPageRef.current;
-    if (!origin) {
-      onDebug(`no origin page=${pageX},${pageY} loc=${locationX},${locationY}`);
-      return;
-    }
-    const col = Math.floor((pageX - origin.x) / cellSize);
-    const row = Math.floor((pageY - origin.y) / cellSize);
-    onDebug(
-      `page=${pageX},${pageY} origin=${origin.x},${origin.y} loc=${locationX},${locationY} row=${row} col=${col} dy=${pageY - origin.y}`,
-    );
   }
 
   function paintAtLocation(x: number, y: number) {
@@ -157,7 +153,6 @@ export function PixelGrid({
         // rather than painting at a stale position.
         measureGrid(() => {
           if (gridPageRef.current) {
-            debugTap(pageX, pageY, locationX, locationY);
             paintAtPage(pageX, pageY);
           } else {
             paintAtLocation(locationX, locationY);
