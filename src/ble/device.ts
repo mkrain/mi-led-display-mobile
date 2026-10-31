@@ -308,7 +308,15 @@ export async function connectToDisplay(
       })(),
       timeout,
     ]);
-    setConnection({id: peripheralId, name});
+    // MTU is requested before the connection is published, so
+    // the banner / status never show "Connected" without an
+    // MTU: the Oct 31 display bug was a status line that
+    // vanished on screen remount, and publishing the MTU as
+    // part of the connection (not as a status suffix) is the
+    // fix. Still never throws: a failed request publishes
+    // mtu null, which the banner reports as unknown.
+    const mtu = await requestMtuIfAndroid(peripheralId);
+    setConnection({id: peripheralId, name, mtu});
     // Persist the last device on every successful connect, so
     // the next launch can fast-reconnect to it directly instead
     // of paying for a full scan first. This covers manual
@@ -317,7 +325,7 @@ export async function connectToDisplay(
     // awaited, so a kill immediately after connect does not
     // lose it.
     await saveLastDevice({id: peripheralId, name});
-    return requestMtuIfAndroid(peripheralId);
+    return mtu;
   } catch (error) {
     await BleManager.disconnect(peripheralId).catch(() => undefined);
     clearConnection();
@@ -379,16 +387,19 @@ export async function refreshConnection(): Promise<ConnectionInfo | null> {
     }
     const display = connected.find(isDisplay);
     if (display) {
+      // Adopted connections did not go through
+      // connectToDisplay, so they never got an MTU request.
+      // Best effort, result stored: a failed request here
+      // must not turn an adopted connection into an error,
+      // and the banner must still show MTU unknown, not a
+      // stale number from an earlier session.
+      const mtu = await requestMtuIfAndroid(display.id).catch(() => null);
       const info: ConnectionInfo = {
         id: display.id,
         name: display.name ?? null,
+        mtu,
       };
       setConnection(info);
-      // Adopted connections did not go through
-      // connectToDisplay, so they never got an MTU request.
-      // Best effort, result ignored: a failed request here
-      // must not turn an adopted connection into an error.
-      await requestMtuIfAndroid(display.id).catch(() => null);
       return info;
     }
     if (current) {

@@ -1,5 +1,5 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {Button, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View} from 'react-native';
+import {Button, Platform, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import {
   connectToDisplay,
@@ -49,6 +49,17 @@ export function ConnectScreen() {
   const {connection, refresh} = useConnectionState();
   const connectedId = connection?.id ?? null;
   const connectedName = connection?.name ?? null;
+  // MTU lives on the shared connection (Oct 31, 2026 fix), so
+  // the banner and the initial status can show it on every
+  // mount, not only in the transient status line set right
+  // after a connect tap.
+  const connectedMtu = connection?.mtu ?? null;
+  const bannerMtu =
+    Platform.OS === 'android' && connectedId
+      ? connectedMtu !== null
+        ? ` · MTU ${connectedMtu}`
+        : ' · MTU unknown'
+      : '';
   // Status is operation feedback, NOT a second connection truth.
   // It is initialised from the shared connection (a fresh Connect
   // instance must not start at "Not connected" while the banner
@@ -57,7 +68,7 @@ export function ConnectScreen() {
   const [status, setStatus] = useState(() =>
     connection
       ? connection.name
-        ? `Connected to ${connection.name}.`
+        ? `Connected to ${connection.name}.${mtuStatusSuffix(connectedMtu)}`
         : 'Connected.'
       : 'Not connected',
   );
@@ -143,12 +154,14 @@ export function ConnectScreen() {
   useEffect(() => {
     if (connection && status === 'Not connected') {
       setStatus(
-        connectedName ? `Connected to ${connectedName}.` : 'Connected.',
+        connectedName
+          ? `Connected to ${connectedName}.${mtuStatusSuffix(connectedMtu)}`
+          : 'Connected.',
       );
     } else if (!connection && status.startsWith('Connected to')) {
       setStatus('Not connected');
     }
-  }, [connection, connectedName, status]);
+  }, [connection, connectedName, connectedMtu, status]);
 
   // Remember the last connected device while connected, so a
   // Connect row can be shown for it after disconnect even when
@@ -361,8 +374,8 @@ export function ConnectScreen() {
         <Text style={[styles.bannerText, connectedId ? styles.bannerTextConnected : styles.bannerTextDisconnected]}>
           {connectedId
             ? connectedName
-              ? `● Connected to ${connectedName}`
-              : '● Connected'
+              ? `● Connected to ${connectedName}${bannerMtu}`
+              : `● Connected${bannerMtu}`
             : '○ Not connected'}
         </Text>
       </View>

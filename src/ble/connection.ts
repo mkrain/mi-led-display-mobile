@@ -21,6 +21,16 @@
 export type ConnectionInfo = {
   id: string;
   name: string | null;
+  /**
+   * Granted Android MTU, Oct 31, 2026: null on iOS (CoreBluetooth
+   * negotiates MTU itself) and on Android when negotiation
+   * failed or has not run yet. Stored here, not in a screen's
+   * status text, so a tab switch / screen remount cannot lose
+   * it — the Oct 31 "No mtu status displayed" report was a
+   * status line that vanished on remount, not a missing MTU
+   * request.
+   */
+  mtu: number | null;
 };
 
 let current: ConnectionInfo | null = null;
@@ -33,7 +43,11 @@ export function getConnection(): ConnectionInfo | null {
 }
 
 export function setConnection(info: ConnectionInfo | null): void {
-  if (current?.id === info?.id && current?.name === info?.name) {
+  if (
+    current?.id === info?.id &&
+    current?.name === info?.name &&
+    current?.mtu === info?.mtu
+  ) {
     return;
   }
   current = info;
