@@ -77,6 +77,22 @@ export async function requestAndroidPermissions(): Promise<boolean> {
   return Object.values(result).every(v => v === PermissionsAndroid.RESULTS.GRANTED);
 }
 
+/**
+ * Android runtime-permission gate for operations that touch the
+ * adapter (connect, scan). Throws a friendly error when the
+ * permission is not granted, instead of letting Android's
+ * SecurityException ("Need android.permission.BLUETOOTH_CONNECT
+ * permission for AttributionSource…") surface verbatim.
+ * Idempotent: requesting an already-granted permission returns
+ * immediately without showing a dialog.
+ */
+async function ensureAndroidPermissions(): Promise<void> {
+  const granted = await requestAndroidPermissions();
+  if (!granted) {
+    throw new Error('Bluetooth permissions were not granted.');
+  }
+}
+
 function isDisplay(peripheral: Peripheral): boolean {
   // Match Python (BleakScanner.discover() + `"MI Matrix Display" in name`):
   // substring, not exact — iOS may report a trailing space or a shortened
@@ -192,9 +208,11 @@ async function scanAndCollect(
 
 /**
  * Scan for the display for `seconds` and return matching peripherals.
- * Call requestAndroidPermissions() first on Android.
+ * Requests the Android runtime permission first (no-op when already
+ * granted), so callers cannot hit Android's SecurityException.
  */
 export async function scanForDisplay(seconds = 20): Promise<Peripheral[]> {
+  await ensureAndroidPermissions();
   await ensureStarted();
   await requireBleOn();
   return scanAndCollect(seconds, isDisplay);
@@ -225,6 +243,8 @@ export async function connectToDisplay(
   name: string | null = null,
   timeoutMs = 15000,
 ): Promise<void> {
+  // Android: permission first, or connect throws SecurityException.
+  await ensureAndroidPermissions();
   await ensureStarted();
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
@@ -290,6 +310,21 @@ export function getConnectedPeripheralId(): string | null {
  * Best-effort by design: callers swallow its errors.
  */
 export async function refreshConnection(): Promise<ConnectionInfo | null> {
+  // Best-effort status sync: never prompt and never throw for a
+  // missing permission. On Android 12+, touching the adapter
+  // without BLUETOOTH_CONNECT throws SecurityException, so check
+  // silently first and report the current state instead.
+  if (Platform.OS === 'android') {
+    const apiLevel = typeof Platform.Version === 'number' ? Platform.Version : 0;
+    if (apiLevel >= 31) {
+      const hasConnect = await PermissionsAndroid.check(
+        PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+      );
+      if (!hasConnect) {
+        return getConnection();
+      }
+    }
+  }
   await ensureStarted();
   const current = getConnection();
   try {
