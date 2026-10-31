@@ -1,5 +1,5 @@
 import React, {memo, useRef, useState} from 'react';
-import {StyleSheet, View} from 'react-native';
+import {Platform, StatusBar, StyleSheet, View} from 'react-native';
 import type {RGB} from '../conversion/convert';
 import {hsvToRgb, rgbToHue, rgbToSaturation} from '../conversion/color';
 import {rgbToCss} from './PixelGrid';
@@ -31,6 +31,16 @@ import {rgbToCss} from './PixelGrid';
  * Scrolling is locked during a pad gesture via onDragStart /
  * onDragEnd, so a vertical drag on the pad paints a colour
  * instead of scrolling the screen.
+ *
+ * Android, Oct 31, 2026: same status-bar split proven for
+ * PixelGrid (pageY ~25 higher than measureInWindow, X
+ * exact) applies here unchanged — the pad shares the
+ * coordinate system, so an uncorrected pick reads
+ * saturation ~0.21 too high (25 / 120px pad) and the top
+ * of the pad cannot pick pale colours at all. pickAtPage
+ * therefore subtracts StatusBar.currentHeight from pageY
+ * on Android only, exactly as PixelGrid does; iOS is
+ * untouched.
  */
 const HUE_STEPS = 36;
 const SAT_STEPS = 12;
@@ -105,9 +115,16 @@ export function ColorPad({
       return;
     }
     const hueFraction = Math.min(1, Math.max(0, (pageX - origin.x) / width));
+    // Android status-bar offset, Oct 31, 2026 (see header):
+    // pageY is ~25 higher than measureInWindow's system,
+    // X is unaffected. iOS: 0.
+    const adjustedY =
+      Platform.OS === 'android'
+        ? pageY - (StatusBar.currentHeight ?? 0)
+        : pageY;
     const satFraction = Math.min(
       1,
-      Math.max(0, (pageY - origin.y) / PAD_HEIGHT),
+      Math.max(0, (adjustedY - origin.y) / PAD_HEIGHT),
     );
     onColorChange(hsvToRgb(hueFraction * 360, satFraction, 1));
   }
