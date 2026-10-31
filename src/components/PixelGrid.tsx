@@ -14,6 +14,15 @@ interface PixelGridProps {
   /** Called when a paint gesture starts / ends, so a parent ScrollView can lock scrolling during the drag. */
   onDragStart?: () => void;
   onDragEnd?: () => void;
+  /**
+   * Diagnostic only (Oct 31, 2026, Android off-by-one): called
+   * on gesture grant with the raw numbers behind the paint
+   * decision, so a device tap can settle whether pageY or
+   * the measured origin is off, instead of guessing. Does
+   * NOT change painting: the painted index is computed
+   * exactly as before.
+   */
+  onDebug?: (info: string) => void;
 }
 
 /**
@@ -48,6 +57,7 @@ export function PixelGrid({
   onPixelPress,
   onDragStart,
   onDragEnd,
+  onDebug,
 }: PixelGridProps) {
   const lastIndexRef = useRef<number | null>(null);
   const gridRef = useRef<View | null>(null);
@@ -84,6 +94,27 @@ export function PixelGrid({
     }
     lastIndexRef.current = index;
     onPixelPress(index);
+  }
+
+  function debugTap(
+    pageX: number,
+    pageY: number,
+    locationX: number,
+    locationY: number,
+  ) {
+    if (!onDebug) {
+      return;
+    }
+    const origin = gridPageRef.current;
+    if (!origin) {
+      onDebug(`no origin page=${pageX},${pageY} loc=${locationX},${locationY}`);
+      return;
+    }
+    const col = Math.floor((pageX - origin.x) / cellSize);
+    const row = Math.floor((pageY - origin.y) / cellSize);
+    onDebug(
+      `page=${pageX},${pageY} origin=${origin.x},${origin.y} loc=${locationX},${locationY} row=${row} col=${col} dy=${pageY - origin.y}`,
+    );
   }
 
   function paintAtLocation(x: number, y: number) {
@@ -126,6 +157,7 @@ export function PixelGrid({
         // rather than painting at a stale position.
         measureGrid(() => {
           if (gridPageRef.current) {
+            debugTap(pageX, pageY, locationX, locationY);
             paintAtPage(pageX, pageY);
           } else {
             paintAtLocation(locationX, locationY);
