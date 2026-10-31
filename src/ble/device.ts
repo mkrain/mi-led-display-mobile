@@ -6,9 +6,16 @@
  * Untested on hardware: the iOS build, the Android build, and the real
  * "MI Matrix Display" connection have NOT been run yet — the VM cannot do
  * them. They are run on a developer's Mac / phone (see mobile/README.md).
- * In particular, a 100-byte full-picture block may need an MTU above the
- * default on some phones; if block writes fail, request a larger MTU
- * (BleManager.requestMTU) before retrying.
+ * In particular, a 100-byte full-picture block needs an MTU above
+ * the Android default: iOS/macOS negotiate a larger MTU
+ * automatically, Android stays at 23-byte ATT (20-byte payload)
+ * unless the app asks, so an unnegotiated Android link splits
+ * or truncates full-picture blocks and the panel shows a
+ * garbled mosaic instead of the image (Oct 31, 2026, both
+ * Draw and Photo on Samsung A15). connectToDisplay therefore
+ * requests a larger MTU on Android after connect (see
+ * requestMtuIfAndroid), and reports the granted MTU so a
+ * too-small grant is visible instead of a silent garble.
  */
 
 import {PermissionsAndroid, Platform} from 'react-native';
@@ -103,7 +110,39 @@ function isDisplay(peripheral: Peripheral): boolean {
   );
 }
 
-/** Bluetooth radio state, e.g. 'on' / 'off' / 'unauthorized' / 'unknown'. */
+/**
+ * Android MTU (Oct 31, 2026): request 512, take whatever the
+ * panel grants. Returns the granted MTU, or null on iOS
+ * (not applicable — CoreBluetooth negotiates MTU itself)
+ * and on Android when negotiation fails. A failure must
+ * never fail the connect: the link still works for short
+ * commands, and a too-small grant is reported to the user
+ * instead of silently garbling full pictures. A full-picture
+ * block needs a grant of at least 104 (101-byte stored block
+ * + 3 ATT bytes); a 100-byte live block needs 103.
+ */
+async function requestMtuIfAndroid(
+  peripheralId: string,
+): Promise<number | null> {
+  if (Platform.OS !== 'android') {
+    return null;
+  }
+  try {
+    return await BleManager.requestMTU(peripheralId, 512);
+  } catch {
+    return null;
+  }
+}
+
+export function mtuStatusSuffix(mtu: number | null): string {
+  if (Platform.OS !== 'android') {
+    return '';
+  }
+  if (mtu === null) {
+    return ' MTU negotiation failed, full pictures may be garbled.';
+  }
+  return ` MTU ${mtu}.`;
+}
 export async function getBleState(): Promise<string> {
   await ensureStarted();
   return BleManager.checkState();
@@ -237,12 +276,17 @@ export async function scanAllPeripherals(seconds = 20): Promise<Peripheral[]> {
  * stays "Connecting…" with its buttons disabled, which is exactly the
  * stuck state seen on hardware. On timeout we disconnect and throw, so
  * the screen unblocks with a real error instead.
+ *
+ * Returns the granted Android MTU, or null on iOS / when MTU
+ * negotiation failed (see requestMtuIfAndroid). The MTU request
+ * runs AFTER the connect timeout race, so a slow MTU negotiation
+ * cannot burn the connect timeout, and it never throws.
  */
 export async function connectToDisplay(
   peripheralId: string,
   name: string | null = null,
   timeoutMs = 15000,
-): Promise<void> {
+): Promise<number | null> {
   // Android: permission first, or connect throws SecurityException.
   await ensureAndroidPermissions();
   await ensureStarted();
@@ -273,6 +317,7 @@ export async function connectToDisplay(
     // awaited, so a kill immediately after connect does not
     // lose it.
     await saveLastDevice({id: peripheralId, name});
+    return requestMtuIfAndroid(peripheralId);
   } catch (error) {
     await BleManager.disconnect(peripheralId).catch(() => undefined);
     clearConnection();
@@ -339,6 +384,11 @@ export async function refreshConnection(): Promise<ConnectionInfo | null> {
         name: display.name ?? null,
       };
       setConnection(info);
+      // Adopted connections did not go through
+      // connectToDisplay, so they never got an MTU request.
+      // Best effort, result ignored: a failed request here
+      // must not turn an adopted connection into an error.
+      await requestMtuIfAndroid(display.id).catch(() => null);
       return info;
     }
     if (current) {

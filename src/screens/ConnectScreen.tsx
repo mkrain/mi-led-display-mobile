@@ -4,6 +4,7 @@ import {useFocusEffect} from '@react-navigation/native';
 import {
   connectToDisplay,
   disconnectDisplay,
+  mtuStatusSuffix,
   refreshConnection,
   requestAndroidPermissions,
   scanAllPeripherals,
@@ -226,8 +227,8 @@ export function ConnectScreen() {
       setStatus(`Auto-connecting to ${name}…`);
       // Shared state updates via device.ts's connection
       // notification — no local setConnectedId here.
-      await connectToDisplay(first.id, name);
-      setStatus(`Auto-connected to ${name}.`);
+      const mtu = await connectToDisplay(first.id, name);
+      setStatus(`Auto-connected to ${name}.${mtuStatusSuffix(mtu)}`);
       return;
     }
     setStatus(
@@ -291,8 +292,8 @@ export function ConnectScreen() {
         const lastName = last.name ?? 'MI Matrix Display';
         setStatus(`Reconnecting to ${lastName}…`);
         try {
-          await connectToDisplay(last.id, last.name, 8000);
-          setStatus(`Reconnected to ${lastName}.`);
+          const mtu = await connectToDisplay(last.id, last.name, 8000);
+          setStatus(`Reconnected to ${lastName}.${mtuStatusSuffix(mtu)}`);
           return;
         } catch {
           // Fall through to the scan below, but SAY so: the
@@ -338,8 +339,8 @@ export function ConnectScreen() {
       if (connectedId) {
         await disconnectDisplay();
       }
-      await connectToDisplay(device.id, name);
-      setStatus(`Connected to ${name}.`);
+      const mtu = await connectToDisplay(device.id, name);
+      setStatus(`Connected to ${name}.${mtuStatusSuffix(mtu)}`);
     });
   }
 
