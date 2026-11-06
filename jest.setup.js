@@ -60,3 +60,23 @@ jest.mock('@react-native-community/slider', () => {
     default: View,
   };
 });
+
+/**
+ * Share export in Jest (Nov 6, 2026): neither native module
+ * exists in Jest, so stub both. The PNG encoder itself is
+ * pure JS and is tested directly; the share path is tested
+ * with these stubs, asserting the file it writes and the
+ * options it opens the sheet with.
+ */
+jest.mock('react-native-share', () => ({
+  __esModule: true,
+  default: {
+    open: jest.fn().mockResolvedValue({success: true, message: 'ok'}),
+  },
+}));
+
+jest.mock('@dr.pogodin/react-native-fs', () => ({
+  __esModule: true,
+  CachesDirectoryPath: '/mock-cache',
+  writeFile: jest.fn().mockResolvedValue(undefined),
+}));
