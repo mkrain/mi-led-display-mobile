@@ -1,5 +1,6 @@
 import Share from 'react-native-share';
 import {writeFile} from '@dr.pogodin/react-native-fs';
+import base64js from 'base64-js';
 import {shareFileName, shareSlideshowItem} from '../shareSlideshowItem';
 import type {RGB} from '../../conversion/convert';
 
@@ -32,10 +33,12 @@ describe('shareSlideshowItem', () => {
     });
     expect(outcome).toBe('shared');
     expect(mockWriteFile).toHaveBeenCalledTimes(1);
-    const [path, data] = mockWriteFile.mock.calls[0];
+    const [path, data, encoding] = mockWriteFile.mock.calls[0];
     expect(path).toBe('/mock-cache/mi-led-smeargle-photo.png');
-    // PNG signature on the written bytes.
-    const bytes = new Uint8Array(data as ArrayBuffer);
+    expect(encoding).toBe('base64');
+    // The written content is base64; decode it and check
+    // the PNG signature on the resulting bytes.
+    const bytes = base64js.toByteArray(data as string);
     expect(Array.from(bytes.subarray(0, 8))).toEqual([
       137, 80, 78, 71, 13, 10, 26, 10,
     ]);

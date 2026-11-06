@@ -1,5 +1,6 @@
 import Share from 'react-native-share';
 import {CachesDirectoryPath, writeFile} from '@dr.pogodin/react-native-fs';
+import base64js from 'base64-js';
 import type {RGB} from '../conversion/convert';
 import {pixelsToPng} from './encodePng';
 
@@ -41,11 +42,12 @@ export async function shareSlideshowItem(item: {
   const filename = shareFileName(item.label);
   const path = `${CachesDirectoryPath}/${filename}`;
   const png = pixelsToPng(item.pixels);
-  // writeFile accepts an ArrayBuffer; pass the PNG bytes
-  // directly, not a base64 string, so no re-encoding is
-  // needed. The Uint8Array is freshly built here, so its
-  // buffer is exactly the PNG bytes.
-  await writeFile(path, png.buffer as ArrayBuffer);
+  // 2.40.4's writeFile takes a string, not an ArrayBuffer
+  // (that API arrived in 2.41.0, whose TurboModule spec
+  // uses ArrayBuffer — unrecognised by RN 0.81.4's codegen,
+  // which is why 2.40.4 is pinned). Encode the PNG bytes
+  // as base64 with base64-js, already a dependency.
+  await writeFile(path, base64js.fromByteArray(png), 'base64');
   try {
     const result = await Share.open({
       url: `file://${path}`,
