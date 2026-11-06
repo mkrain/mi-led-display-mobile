@@ -29,7 +29,12 @@ import {MAX_SLIDESHOW_ITEMS} from '../slideshow/queue';
  *
  * A full target reports "[Name] is full (10 items, panel
  * limit)" and adds nothing — it never silently substitutes
- * another slideshow.
+ * another slideshow. It also opens the picker, so the
+ * alternatives are offered at the tap point instead of
+ * only in the status line at the top of the screen (which
+ * is off-screen when the Add button is in view). Picking
+ * a full target inside the picker re-opens the picker,
+ * so the user can pick another slideshow or Cancel.
  *
  * No icon library is used (that would need a native
  * rebuild): ▾ is plain text.
@@ -64,6 +69,12 @@ export function AddToSlideshowButton({
           : `Added to ${result.name}.`,
       );
     } else {
+      // Full (or unknown) target: report it, and offer the
+      // alternatives right here. Gate on a non-empty name so
+      // an unknown-target failure does not open the picker.
+      if (result.name) {
+        setPickerVisible(true);
+      }
       onResult(
         `${result.name} is full (${MAX_SLIDESHOW_ITEMS} items, panel limit). Remove one first.`,
       );
