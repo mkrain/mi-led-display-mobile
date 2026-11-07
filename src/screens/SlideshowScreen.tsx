@@ -19,9 +19,10 @@ import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '../../App';
 import {saveSlideshowReplace} from '../ble/device';
 import {ShareImageButton} from '../components/ShareImageButton';
+import {shareSpriteSheet} from '../export/shareSlideshowItem';
 import type {RGB} from '../conversion/convert';
 import {MAX_SLIDESHOW_ITEMS} from '../slideshow/queue';
-import {nextDefaultName} from '../slideshow/library';
+import {nextDefaultName, type Slideshow} from '../slideshow/library';
 
 /**
  * Slideshows library screen (Oct 30, 2026, first
@@ -69,6 +70,44 @@ export function SlideshowScreen() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
+  // Sprite-sheet share, one button per slideshow row
+  // (Nov 7, 2026): sharing a sheet for one slideshow
+  // while another is sharing would write the same cache
+  // filename pattern twice, so one share at a time.
+  const [sharingSlideshowId, setSharingSlideshowId] = useState<
+    string | null
+  >(null);
+
+  async function shareSheetFor(slideshow: Slideshow) {
+    if (saving || sharingSlideshowId) {
+      return;
+    }
+    if (slideshow.items.length === 0) {
+      setSaveStatus(`${slideshow.name} is empty — nothing to share.`);
+      return;
+    }
+    setSharingSlideshowId(slideshow.id);
+    try {
+      const outcome = await shareSpriteSheet({
+        name: slideshow.name,
+        items: slideshow.items.map(item => item.pixels),
+      });
+      setSaveStatus(
+        outcome === 'shared'
+          ? `Shared ${slideshow.name} as a sprite sheet ` +
+              `(${slideshow.items.length} ` +
+              `${slideshow.items.length === 1 ? 'item' : 'items'}).`
+          : 'Sharing cancelled.',
+      );
+    } catch (e) {
+      setSaveStatus(
+        `Sharing ${slideshow.name} failed: ` +
+          `${e instanceof Error ? e.message : String(e)}`,
+      );
+    } finally {
+      setSharingSlideshowId(null);
+    }
+  }
   // Share export lives in ShareImageButton now (Nov 7,
   // 2026): same button and feedback as Draw and Photo,
   // no local sharing state here.
@@ -229,6 +268,30 @@ export function SlideshowScreen() {
                     {new Date(lastSaved.savedAt).toLocaleDateString()}
                   </Text>
                 ) : null}
+              </TouchableOpacity>
+              {/* Save (Nov 7, 2026): one sprite sheet per
+                  slideshow, named after it, tiles in order.
+                  Empty slideshows have nothing to share. */}
+              <TouchableOpacity
+                onPress={() => shareSheetFor(s)}
+                disabled={
+                  saving ||
+                  sharingSlideshowId !== null ||
+                  s.items.length === 0
+                }
+                accessibilityLabel={`Share ${s.name} as a sprite sheet`}
+              >
+                <Text
+                  style={[
+                    styles.libCtrl,
+                    (saving ||
+                      sharingSlideshowId !== null ||
+                      s.items.length === 0) &&
+                      styles.ctrlDisabled,
+                  ]}
+                >
+                  ⤴️
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() =>

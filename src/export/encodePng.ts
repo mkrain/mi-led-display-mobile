@@ -13,6 +13,12 @@ import type {RGB} from '../conversion/convert';
  * 16x16 becomes 256x256) so the pixels stay crisp in
  * Photos / Files instead of blurring.
  *
+ * Nov 7, 2026: sprite-sheet export — a whole slideshow
+ * as one PNG, tiles left to right, top to bottom, in
+ * slideshow order (5 tiles across, rows as needed), so
+ * one file carries the whole set and its order. Empty
+ * cells in the last row stay black, like panel-off.
+ *
  * No PNG dependency is used: Hermes has no Node zlib, and
  * the JPEG encoder already in the tree (jpeg-js) is lossy,
  * which would smear sharp pixel edges. The IDAT chunk is
@@ -138,16 +144,106 @@ export function pixelsToPng(pixels: readonly RGB[], scale = DEFAULT_SCALE): Uint
     );
   }
   const size = SOURCE_SIZE * scale;
+  return pngFromScanlines(size, size, buildScanlines(pixels, scale));
+}
+
+/** Tiles across a sprite sheet (Nov 7, 2026): 5 across,
+ * so 1–5 items is one row and 6–10 items is two rows. */
+export const SPRITE_SHEET_COLUMNS = 5;
+
+/**
+ * Grid for a sprite sheet of `count` items: columns are
+ * fixed at 5, rows grow as needed, each tile is
+ * EXPORT_SIZE square, so a full 10-item sheet is
+ * 1280x512. Throws on an empty sheet — there is nothing
+ * to lay out.
+ */
+export function spriteSheetGrid(count: number): {
+  columns: number;
+  rows: number;
+  width: number;
+  height: number;
+} {
+  if (count < 1) {
+    throw new Error(`Expected at least 1 item, got ${count}.`);
+  }
+  const columns = SPRITE_SHEET_COLUMNS;
+  const rows = Math.ceil(count / columns);
+  return {
+    columns,
+    rows,
+    width: columns * EXPORT_SIZE,
+    height: rows * EXPORT_SIZE,
+  };
+}
+
+/**
+ * Raw scanlines for a sprite sheet: tiles left to right,
+ * top to bottom, in slideshow order, each tile upscaled
+ * like a single export. Cells past the last item stay
+ * black (panel-off), so a 7-item sheet has three black
+ * cells at the end of its second row. Exported for tests,
+ * so tile placement can be checked without parsing a PNG.
+ */
+export function buildSpriteSheetScanlines(
+  items: readonly (readonly RGB[])[],
+  scale = DEFAULT_SCALE,
+): Uint8Array {
+  for (const pixels of items) {
+    if (pixels.length !== SOURCE_SIZE * SOURCE_SIZE) {
+      throw new Error(
+        `Expected ${SOURCE_SIZE * SOURCE_SIZE} pixels, got ${pixels.length}.`,
+      );
+    }
+  }
+  const {columns, rows} = spriteSheetGrid(items.length);
+  const tileSize = SOURCE_SIZE * scale;
+  const width = columns * tileSize;
+  const height = rows * tileSize;
+  const rowBytes = width * 3;
+  const out = new Uint8Array(height * (rowBytes + 1));
+  for (let y = 0; y < height; y += 1) {
+    const rowStart = y * (rowBytes + 1);
+    out[rowStart] = 0;
+    const tileRow = Math.floor(y / tileSize);
+    const srcY = Math.floor((y % tileSize) / scale);
+    for (let x = 0; x < width; x += 1) {
+      const tileCol = Math.floor(x / tileSize);
+      const srcX = Math.floor((x % tileSize) / scale);
+      const item = items[tileRow * columns + tileCol];
+      const p = item ? item[srcY * SOURCE_SIZE + srcX] : [0, 0, 0];
+      const i = rowStart + 1 + x * 3;
+      out[i] = p[0];
+      out[i + 1] = p[1];
+      out[i + 2] = p[2];
+    }
+  }
+  return out;
+}
+
+/** A whole slideshow as one PNG sprite sheet. */
+export function itemsToSpriteSheetPng(
+  items: readonly (readonly RGB[])[],
+  scale = DEFAULT_SCALE,
+): Uint8Array {
+  const {width, height} = spriteSheetGrid(items.length);
+  return pngFromScanlines(width, height, buildSpriteSheetScanlines(items, scale));
+}
+
+function pngFromScanlines(
+  width: number,
+  height: number,
+  scanlines: Uint8Array,
+): Uint8Array {
   const ihdr = new Uint8Array(13);
   const ihdrView = new DataView(ihdr.buffer);
-  ihdrView.setUint32(0, size, false);
-  ihdrView.setUint32(4, size, false);
+  ihdrView.setUint32(0, width, false);
+  ihdrView.setUint32(4, height, false);
   ihdr[8] = 8; // bit depth
   ihdr[9] = 2; // colour type 2 = truecolour RGB
   ihdr[10] = 0; // compression
   ihdr[11] = 0; // filter
   ihdr[12] = 0; // interlace
-  const scanlines = buildScanlines(pixels, scale);
   const idat = zlibStored(scanlines);
   const parts = [
     Uint8Array.from(PNG_SIGNATURE),

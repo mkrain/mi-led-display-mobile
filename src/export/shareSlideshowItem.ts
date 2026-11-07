@@ -2,7 +2,7 @@ import Share from 'react-native-share';
 import {CachesDirectoryPath, writeFile} from '@dr.pogodin/react-native-fs';
 import base64js from 'base64-js';
 import type {RGB} from '../conversion/convert';
-import {pixelsToPng} from './encodePng';
+import {itemsToSpriteSheetPng, pixelsToPng} from './encodePng';
 
 /**
  * Share one 16x16 image through the system share sheet
@@ -42,9 +42,34 @@ export async function shareImage(item: {
   label: string;
   pixels: readonly RGB[];
 }): Promise<ShareItemOutcome> {
-  const filename = shareFileName(item.label);
+  return sharePngBytes(
+    shareFileName(item.label),
+    pixelsToPng(item.pixels),
+  );
+}
+
+/**
+ * Share a whole slideshow as one sprite-sheet PNG
+ * (Nov 7, 2026): tiles left to right, top to bottom, in
+ * slideshow order, 5 across. The file is named after the
+ * slideshow, with a `-sheet` suffix so it never collides
+ * with a single-item share named after the same label.
+ */
+export async function shareSpriteSheet(slideshow: {
+  name: string;
+  items: readonly (readonly RGB[])[];
+}): Promise<ShareItemOutcome> {
+  return sharePngBytes(
+    shareFileName(`${slideshow.name}-sheet`),
+    itemsToSpriteSheetPng(slideshow.items),
+  );
+}
+
+async function sharePngBytes(
+  filename: string,
+  png: Uint8Array,
+): Promise<ShareItemOutcome> {
   const path = `${CachesDirectoryPath}/${filename}`;
-  const png = pixelsToPng(item.pixels);
   // 2.40.4's writeFile takes a string, not an ArrayBuffer
   // (that API arrived in 2.41.0, whose TurboModule spec
   // uses ArrayBuffer — unrecognised by RN 0.81.4's codegen,

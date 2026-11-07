@@ -1,7 +1,12 @@
 import Share from 'react-native-share';
 import {writeFile} from '@dr.pogodin/react-native-fs';
 import base64js from 'base64-js';
-import {shareFileName, shareImage, shareSlideshowItem} from '../shareSlideshowItem';
+import {
+  shareFileName,
+  shareImage,
+  shareSlideshowItem,
+  shareSpriteSheet,
+} from '../shareSlideshowItem';
 import type {RGB} from '../../conversion/convert';
 
 const mockOpen = Share.open as jest.Mock;
@@ -89,5 +94,58 @@ describe('shareSlideshowItem', () => {
     await expect(
       shareSlideshowItem({label: 'Demo image', pixels: blackPixels()}),
     ).rejects.toThrow('No app can open this');
+  });
+});
+
+describe('shareSpriteSheet', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockOpen.mockResolvedValue({success: true, message: 'ok'});
+    mockWriteFile.mockResolvedValue(undefined);
+  });
+
+  test('writes one sheet PNG named after the slideshow', async () => {
+    const outcome = await shareSpriteSheet({
+      name: 'My slideshow',
+      items: [blackPixels(), blackPixels()],
+    });
+    expect(outcome).toBe('shared');
+    expect(mockWriteFile).toHaveBeenCalledTimes(1);
+    const [path, data, encoding] = mockWriteFile.mock.calls[0];
+    expect(path).toBe('/mock-cache/mi-led-my-slideshow-sheet.png');
+    expect(encoding).toBe('base64');
+    // Decode the written PNG and check its size: 2 items
+    // in one row is 1280x256.
+    const bytes = base64js.toByteArray(data as string);
+    expect(Array.from(bytes.subarray(0, 8))).toEqual([
+      137, 80, 78, 71, 13, 10, 26, 10,
+    ]);
+    const view = new DataView(bytes.buffer, bytes.byteOffset + 16, 8);
+    expect(view.getUint32(0, false)).toBe(1280);
+    expect(view.getUint32(4, false)).toBe(256);
+    expect(mockOpen).toHaveBeenCalledWith({
+      url: 'file:///mock-cache/mi-led-my-slideshow-sheet.png',
+      type: 'image/png',
+      filename: 'mi-led-my-slideshow-sheet.png',
+    });
+  });
+
+  test('an empty slideshow throws, a dismissed sheet cancels', async () => {
+    await expect(
+      shareSpriteSheet({name: 'My slideshow', items: []}),
+    ).rejects.toThrow('at least 1 item');
+    expect(mockWriteFile).not.toHaveBeenCalled();
+    expect(mockOpen).not.toHaveBeenCalled();
+
+    mockOpen.mockResolvedValue({
+      success: false,
+      message: 'ok',
+      dismissedAction: true,
+    });
+    const outcome = await shareSpriteSheet({
+      name: 'My slideshow',
+      items: [blackPixels()],
+    });
+    expect(outcome).toBe('cancelled');
   });
 });

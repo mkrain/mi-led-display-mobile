@@ -2,9 +2,12 @@
  * headers and stored DEFLATE blocks, which are bitwise. */
 import {
   buildScanlines,
+  buildSpriteSheetScanlines,
   crc32,
   EXPORT_SIZE,
+  itemsToSpriteSheetPng,
   pixelsToPng,
+  spriteSheetGrid,
 } from '../encodePng';
 import type {RGB} from '../../conversion/convert';
 
@@ -134,5 +137,104 @@ describe('PNG encoder', () => {
 
   test('wrong pixel count throws', () => {
     expect(() => pixelsToPng([[0, 0, 0]])).toThrow('Expected 256 pixels');
+  });
+});
+
+describe('Sprite sheet', () => {
+  function solidPixels(colour: [number, number, number]): RGB[] {
+    return Array.from({length: 256}, () => [...colour] as RGB);
+  }
+
+  function pixelAt(
+    scanlines: Uint8Array,
+    width: number,
+    x: number,
+    y: number,
+  ): [number, number, number] {
+    const rowBytes = width * 3;
+    const i = y * (rowBytes + 1) + 1 + x * 3;
+    return [scanlines[i], scanlines[i + 1], scanlines[i + 2]];
+  }
+
+  test('grid is 5 across, rows as needed', () => {
+    expect(spriteSheetGrid(1)).toEqual({
+      columns: 5,
+      rows: 1,
+      width: 1280,
+      height: 256,
+    });
+    expect(spriteSheetGrid(5)).toEqual({
+      columns: 5,
+      rows: 1,
+      width: 1280,
+      height: 256,
+    });
+    expect(spriteSheetGrid(6)).toEqual({
+      columns: 5,
+      rows: 2,
+      width: 1280,
+      height: 512,
+    });
+    expect(spriteSheetGrid(10)).toEqual({
+      columns: 5,
+      rows: 2,
+      width: 1280,
+      height: 512,
+    });
+    expect(() => spriteSheetGrid(0)).toThrow('at least 1 item');
+  });
+
+  test('tiles lay out left to right, top to bottom, in order', () => {
+    const red = solidPixels([255, 0, 0]);
+    const green = solidPixels([0, 255, 0]);
+    const blue = solidPixels([0, 0, 255]);
+    const scanlines = buildSpriteSheetScanlines([red, green, blue]);
+    // Tile 1 top-left, tile 2 next to it, tile 3 next to that.
+    expect(pixelAt(scanlines, 1280, 0, 0)).toEqual([255, 0, 0]);
+    expect(pixelAt(scanlines, 1280, 255, 255)).toEqual([255, 0, 0]);
+    expect(pixelAt(scanlines, 1280, 256, 0)).toEqual([0, 255, 0]);
+    expect(pixelAt(scanlines, 1280, 511, 255)).toEqual([0, 255, 0]);
+    expect(pixelAt(scanlines, 1280, 512, 0)).toEqual([0, 0, 255]);
+  });
+
+  test('second row starts a new row, empty cells stay black', () => {
+    const items = Array.from({length: 6}, (_, i) =>
+      solidPixels(i === 5 ? [255, 255, 0] : [255, 0, 0]),
+    );
+    const scanlines = buildSpriteSheetScanlines(items);
+    // Item 6 is first tile of the second row.
+    expect(pixelAt(scanlines, 1280, 0, 256)).toEqual([255, 255, 0]);
+    expect(pixelAt(scanlines, 1280, 255, 511)).toEqual([255, 255, 0]);
+    // Cells 7–10 of the second row are empty: black.
+    expect(pixelAt(scanlines, 1280, 256, 256)).toEqual([0, 0, 0]);
+    expect(pixelAt(scanlines, 1280, 1279, 511)).toEqual([0, 0, 0]);
+  });
+
+  test('sheet PNG has the grid size and valid CRCs', () => {
+    const png = itemsToSpriteSheetPng([
+      solidPixels([255, 0, 0]),
+      solidPixels([0, 255, 0]),
+    ]);
+    const chunks = parseChunks(png);
+    expect(chunks.map(c => c.type)).toEqual(['IHDR', 'IDAT', 'IEND']);
+    const view = new DataView(
+      chunks[0].data.buffer,
+      chunks[0].data.byteOffset,
+      chunks[0].data.length,
+    );
+    expect(view.getUint32(0, false)).toBe(1280);
+    expect(view.getUint32(4, false)).toBe(256);
+    for (const chunk of chunks) {
+      const crcData = new Uint8Array(4 + chunk.data.length);
+      for (let i = 0; i < 4; i += 1) {
+        crcData[i] = chunk.type.charCodeAt(i);
+      }
+      crcData.set(chunk.data, 4);
+      expect(chunk.crc).toBe(crc32(crcData));
+    }
+    expect(() => itemsToSpriteSheetPng([])).toThrow('at least 1 item');
+    expect(() => itemsToSpriteSheetPng([[[0, 0, 0]]])).toThrow(
+      'Expected 256 pixels',
+    );
   });
 });
