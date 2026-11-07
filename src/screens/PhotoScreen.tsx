@@ -362,7 +362,6 @@ export function PhotoScreen() {
           </TouchableOpacity>
         </View>
       ) : null}
-      <PixelGrid pixels={pixels} cellSize={20} />
       {/* Action toolbar (Nov 7, 2026): Send / Share / Add
           as three equal tool buttons in the shared
           ActionToolbar, same row Draw uses — Send to the
@@ -371,7 +370,8 @@ export function PhotoScreen() {
           it when the active slideshow is full). The
           full-width Send / Share / Add buttons that used
           to sit at the bottom are gone; the actions live
-          here now, right under the preview they act on. */}
+          here now, right under the photo picker they act
+          on, before the converted preview. */}
       <ActionToolbar>
         <ToolButton
           label="Send"
@@ -409,12 +409,13 @@ export function PhotoScreen() {
           accessibilityLabel="Edit crop"
         />
       </ActionToolbar>
+      <PixelGrid pixels={pixels} cellSize={20} />
       {/* Trim/mode picker, directly under the 16x16 preview
           (Oct 30, 2026 cleanup): it used to sit at the very
           bottom, past the sliders and all the buttons, so the
           trim options were hidden below the pictures. Now the
           picker and its help text sit right under the preview
-          they control, before auto-send, sliders, and Send.
+          they control, before auto-send and sliders.
           "View as list" stacks the same cards vertically; it
           is a small text link, not a second control set. */}
       <View style={styles.modeHeader}>
