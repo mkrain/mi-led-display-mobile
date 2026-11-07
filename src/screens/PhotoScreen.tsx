@@ -285,12 +285,13 @@ export function PhotoScreen() {
       <View style={styles.statusWrap}>
         <Text style={styles.status} numberOfLines={1}>{status}</Text>
       </View>
-      {/* Crop editor / picker tile, split by an explicit mode toggle
-          (Oct 29, 2026: tap, drag, and page-scroll fought each other
-          when one tile did all three). The toggle sits right above
-          the tile, next to the picker. Off: plain tappable tile,
-          no gesture responder, scrolling works. On: CropEditor
-          owns the tile, pinch/pan commit on release and switch to
+      {/* Crop editor / picker tile (Oct 29, 2026: tap, drag,
+          and page-scroll fought each other when one tile
+          did all three). The Crop toggle lives in the
+          toolbar directly below this tile, not above it.
+          Off: plain tappable tile, no gesture responder,
+          scrolling works. On: CropEditor owns the tile,
+          pinch/pan commit on release and switch to
           ManualCrop. A plain tap in edit mode does nothing. */}
       {picked && cropEditing ? (
         <CropEditor
@@ -338,30 +339,6 @@ export function PhotoScreen() {
           </View>
         </TouchableOpacity>
       )}
-      <Text style={styles.note}>{sourceLabel}</Text>
-      {picked ? (
-        <View style={styles.photoLinks}>
-          <TouchableOpacity
-            onPress={() => {
-              setCropZoom(1);
-              setCropPan(0, 0);
-              setStatus('Crop reset to centre square.');
-            }}
-            disabled={busy}
-          >
-            <Text style={styles.viewLink}>Reset crop</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => {
-              setPicked(null);
-              setStatus('Back to demo image.');
-            }}
-            disabled={busy}
-          >
-            <Text style={styles.viewLink}>Use demo image</Text>
-          </TouchableOpacity>
-        </View>
-      ) : null}
       {/* Action toolbar (Nov 7, 2026): Send / Share / Add
           as three equal tool buttons in the shared
           ActionToolbar, same row Draw uses — Send to the
@@ -370,8 +347,12 @@ export function PhotoScreen() {
           it when the active slideshow is full). The
           full-width Send / Share / Add buttons that used
           to sit at the bottom are gone; the actions live
-          here now, right under the photo picker they act
-          on, before the converted preview. */}
+          here now, directly under the photo picker they
+          act on, before the converted preview. Reset crop
+          sits underneath the toolbar; Use demo image is
+          gone (Nov 7, 2026) — the demo is still the
+          default with no photo picked, there is just no
+          way back to it once a photo is picked. */}
       <ActionToolbar>
         <ToolButton
           label="Send"
@@ -409,6 +390,21 @@ export function PhotoScreen() {
           accessibilityLabel="Edit crop"
         />
       </ActionToolbar>
+      <Text style={styles.note}>{sourceLabel}</Text>
+      {picked ? (
+        <View style={styles.photoLinks}>
+          <TouchableOpacity
+            onPress={() => {
+              setCropZoom(1);
+              setCropPan(0, 0);
+              setStatus('Crop reset to centre square.');
+            }}
+            disabled={busy}
+          >
+            <Text style={styles.viewLink}>Reset crop</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
       <PixelGrid pixels={pixels} cellSize={20} />
       {/* Trim/mode picker, directly under the 16x16 preview
           (Oct 30, 2026 cleanup): it used to sit at the very
