@@ -11,8 +11,7 @@ Bare React Native, no Expo. BLE needs a native module
 A dev build would still need the native build work, plus the Expo
 layer on top.
 
-Versions pinned at scaffold time. See `package.json` for the exact
-list.
+See `package.json` for the exact list.
 
 - React Native 0.81.4, React 19.1.0, Node >= 20
 - `react-native-ble-manager` 12.6.0
@@ -20,7 +19,12 @@ list.
 - `react-native-screens` 4.24.0
 - `react-native-image-crop-picker` 0.52.0
 - `@react-native-async-storage/async-storage` 2.2.0
-- `@react-native-community/slider` 4.5.6
+- `@react-native-community/slider` 5.2.2
+- `react-native-share` 12.3.1
+- `@dr.pogodin/react-native-fs` 2.40.4, pinned exact. Version 2.41.0
+  breaks the iOS build on React Native 0.81.4: its TurboModule spec
+  uses `ArrayBuffer`, which the 0.81.4 codegen does not recognise.
+- `pako` 3.0.3, `jpeg-js` 0.4.4, `base64-js` 1.5.1
 
 ## Screens
 
@@ -34,19 +38,53 @@ Draw, Photo, Slideshow.
 - Draw: a 16x16 grid. Tap or drag to paint. Colour comes from a
   2D pad (horizontal: hue, vertical: saturation), RGB sliders,
   or a palette strip. An eraser paints black, which is the
-  panel off state. Send shows the grid on the panel for about
-  5 minutes. Add to slideshow stores the grid in a slideshow.
-- Photo: pick a photo, or use the built-in demo image. Pinch
-  to zoom and drag to crop. Pick a trim mode, adjust saturation
-  and brightness, and preview the 16x16 result. Saturation
-  starts at 2.5. Brightness starts at 1. Send shows the photo
-  on the panel for about 5 minutes. Add to slideshow stores
-  the preview in a slideshow.
+  panel off state. The toolbar holds Draw, Erase, Clear, and
+  Share. Send shows the grid on the panel for about 5 minutes.
+  Add to slideshow stores the grid in a slideshow. A slideshow
+  item can be opened back in Draw and saved in place.
+- Photo: pick a photo. Pinch to zoom and drag to crop. Pick a
+  trim mode, adjust saturation and brightness, and preview the
+  16x16 result. Saturation starts at 2.5. The toolbar holds
+  Send, Share, Add, and Crop. Send shows the photo on the panel
+  for about 5 minutes. Add to slideshow stores the preview in
+  a slideshow. A built-in demo image is the preview until a
+  photo is picked. Once a photo is picked, there is no button
+  to go back to the demo image.
 - Slideshow: a library of named slideshows. One slideshow is
   active at a time. Add, remove, and reorder items in the
   active slideshow. Save sends the active slideshow to the
   panel. The panel holds one set at a time, with a limit of
   10 items per slideshow.
+
+## Export and import
+
+Slideshow items live only in the app. Deleting the app deletes
+them. The panel is no backup: it holds only the last saved set.
+
+- Share one image: Draw, Photo, and Slideshow each have a Share
+  button. It writes the 16x16 picture as a 256x256 PNG to the
+  cache and opens the system share sheet. Pick Photos, Files,
+  Drive, or OneDrive from there. Google Photos is not a
+  share-sheet target on iOS. The system Save Image action in
+  the share sheet saves to Apple Photos, and Google Photos
+  backup picks it up from there.
+- Share a whole slideshow: every slideshow row has a save
+  button. It writes one sprite sheet PNG: tiles left to right,
+  top to bottom, in slideshow order, 5 across, each tile
+  256x256. A 64px header strip across the top carries the
+  slideshow name in white 5x7 pixel text. The file also
+  carries the name in a PNG tEXt Title chunk. Photos renames
+  a saved image to IMG_XXXX, so the name lives in the image
+  itself. The name is a label only. Anyone can edit a PNG
+  outside the app, and the app does no validation or signing.
+- Import a sprite sheet: the Slideshow screen has an Import
+  button. Pick a sheet made by this app from Photos. It splits
+  the sheet back into 16x16 items, in order, and creates a new
+  slideshow. It never overwrites an existing slideshow. The
+  name comes from the header text, or the tEXt Title, or falls
+  back to "Imported slideshow". PNG imports exactly. JPEG is
+  also accepted, with colours close to the originals instead
+  of exact. Files import is not built yet.
 
 ## Panel behaviour
 
@@ -109,9 +147,11 @@ and the Android SDK for Android, Node >= 20.
 npm install
 
 # iOS (first time, and after any native dependency change)
-bundle install
-bundle exec pod install
+cd ios && pod install && cd ..
 npm run ios
+
+# iOS on a physical device
+npx react-native run-ios --device
 
 # Android (emulator running, or a device connected)
 npm run android
@@ -131,8 +171,11 @@ npx tsc --noEmit  # TypeScript
 npm run lint      # ESLint
 ```
 
-iOS has been tested on a physical iPhone. Android builds
-have not been tested yet.
+iOS has been tested on a physical iPhone. Android has been
+tested end to end on a physical Samsung device: Draw,
+ColorPad, complex Photo Send, and the app icon all work.
+The Android MTU fix is `requestMTU(peripheralId, 512)`
+after connect. Without it, complex photos send garbled.
 
 ## BLE permissions
 
