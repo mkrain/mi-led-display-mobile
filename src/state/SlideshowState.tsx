@@ -13,6 +13,7 @@ import {
   addItemToSlideshow,
   clearActive,
   createSlideshow,
+  createSlideshowWithItems,
   deleteSlideshow,
   EMPTY_LIBRARY,
   makeSlideshowItem,
@@ -81,6 +82,17 @@ export type SlideshowState = {
     pixels: RGB[],
   ) => AddResult;
   createSlideshow: (name: string) => string | null;
+  /**
+   * Import: create a slideshow already holding items,
+   * make it active, and return its id (null on an empty
+   * name). The name is de-duplicated here — "Name",
+   * "Name 2", "Name 3" — so an import never collides
+   * with an existing slideshow.
+   */
+  importSlideshow: (
+    name: string,
+    items: {label: string; detail: string; pixels: RGB[]}[],
+  ) => string | null;
   renameSlideshow: (id: string, name: string) => void;
   deleteSlideshow: (id: string) => void;
   setActiveSlideshow: (id: string) => void;
@@ -191,6 +203,31 @@ export function SlideshowStateProvider({children}: {children: ReactNode}) {
     return id;
   };
 
+  const importSlideshowByName = (
+    name: string,
+    items: {label: string; detail: string; pixels: RGB[]}[],
+  ) => {
+    const trimmed = name.trim();
+    if (trimmed.length === 0 || items.length === 0) {
+      return null;
+    }
+    const taken = new Set(library.slideshows.map(s => s.name));
+    let unique = trimmed;
+    let n = 2;
+    while (taken.has(unique)) {
+      unique = `${trimmed} ${n}`;
+      n += 1;
+    }
+    const id = nextId();
+    const slideshowItems = items.map(item =>
+      makeSlideshowItem(nextId(), item.label, item.detail, item.pixels),
+    );
+    setLibrary(prev =>
+      createSlideshowWithItems(prev, id, unique, slideshowItems),
+    );
+    return id;
+  };
+
   return (
     <SlideshowStateContext.Provider
       value={{
@@ -203,6 +240,7 @@ export function SlideshowStateProvider({children}: {children: ReactNode}) {
         addItemToSlideshow: addItemToSlideshowById,
         addItemToNewSlideshow,
         createSlideshow: createSlideshowByName,
+        importSlideshow: importSlideshowByName,
         renameSlideshow: (id, name) =>
           setLibrary(prev => renameSlideshow(prev, id, name)),
         deleteSlideshow: id =>

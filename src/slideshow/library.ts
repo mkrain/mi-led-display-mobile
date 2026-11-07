@@ -170,6 +170,33 @@ export function createSlideshow(
   };
 }
 
+/**
+ * Create a slideshow already holding items, in one
+ * step (Nov 7, 2026, sprite-sheet import): adding items
+ * one at a time through the provider would each start
+ * from the same render's library, so only the last
+ * would survive. One call, one state update.
+ */
+export function createSlideshowWithItems(
+  library: SlideshowLibrary,
+  id: string,
+  name: string,
+  items: SlideshowItem[],
+): SlideshowLibrary {
+  const trimmed = name.trim();
+  if (trimmed.length === 0) {
+    return library;
+  }
+  return {
+    ...library,
+    slideshows: [
+      ...library.slideshows,
+      {id, name: trimmed, items: [...items]},
+    ],
+    activeId: id,
+  };
+}
+
 export function renameSlideshow(
   library: SlideshowLibrary,
   id: string,

@@ -20,6 +20,9 @@ import type {RootStackParamList} from '../../App';
 import {saveSlideshowReplace} from '../ble/device';
 import {ShareImageButton} from '../components/ShareImageButton';
 import {shareSpriteSheet} from '../export/shareSlideshowItem';
+import {decodePng} from '../export/decodePng';
+import {importSpriteSheet} from '../export/importSpriteSheet';
+import {pickPngFile} from '../photos/pickPngFile';
 import type {RGB} from '../conversion/convert';
 import {MAX_SLIDESHOW_ITEMS} from '../slideshow/queue';
 import {nextDefaultName, type Slideshow} from '../slideshow/library';
@@ -60,6 +63,7 @@ export function SlideshowScreen() {
     lastSaved,
     setActiveSlideshow,
     createSlideshow,
+    importSlideshow,
     renameSlideshow,
     deleteSlideshow,
     removeItemById,
@@ -77,6 +81,50 @@ export function SlideshowScreen() {
   const [sharingSlideshowId, setSharingSlideshowId] = useState<
     string | null
   >(null);
+  const [importing, setImporting] = useState(false);
+
+  async function importSheet() {
+    if (saving || sharingSlideshowId || importing) {
+      return;
+    }
+    setImporting(true);
+    try {
+      // Source-agnostic import: the picker supplies bytes,
+      // the decode/split work on bytes alone — a Files
+      // picker later just supplies bytes to the same path.
+      const picked = await pickPngFile();
+      if (!picked) {
+        setSaveStatus('Import cancelled.');
+        return;
+      }
+      const sheet = importSpriteSheet(decodePng(picked.bytes));
+      const name = sheet.name ?? 'Imported slideshow';
+      const id = importSlideshow(
+        name,
+        sheet.items.map((pixels, i) => ({
+          label: `Imported ${i + 1}`,
+          detail: 'Sprite sheet',
+          pixels,
+        })),
+      );
+      if (!id) {
+        setSaveStatus('Import failed: could not create a slideshow.');
+        return;
+      }
+      setSelectedId(null);
+      setSaveStatus(
+        `Imported ${name} (${sheet.items.length} ` +
+          `${sheet.items.length === 1 ? 'item' : 'items'}) ` +
+          'as a new slideshow.',
+      );
+    } catch (e) {
+      setSaveStatus(
+        `Import failed: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    } finally {
+      setImporting(false);
+    }
+  }
 
   async function shareSheetFor(slideshow: Slideshow) {
     if (saving || sharingSlideshowId) {
@@ -218,22 +266,45 @@ export function SlideshowScreen() {
             section). */}
         <View style={styles.headerRow}>
           <Text style={styles.headerTitle}>Slideshows</Text>
-          <TouchableOpacity
-            onPress={() =>
-              setNameModal({
-                mode: 'create',
-                id: null,
-                name: nextDefaultName(slideshows),
-              })
-            }
-            disabled={saving}
-          >
-            <Text
-              style={[styles.headerNew, saving && styles.headerNewDisabled]}
+          <View style={styles.headerActions}>
+            {/* Import (Nov 7, 2026): pick a sprite sheet
+                from Photos and bring it back as a new
+                slideshow. The picker must not convert or
+                compress — see pickPngFile — or the sheet
+                is destroyed before decoding. */}
+            <TouchableOpacity
+              onPress={importSheet}
+              disabled={saving || sharingSlideshowId !== null || importing}
             >
-              ＋ New
-            </Text>
-          </TouchableOpacity>
+              <Text
+                style={[
+                  styles.headerNew,
+                  (saving ||
+                    sharingSlideshowId !== null ||
+                    importing) &&
+                    styles.headerNewDisabled,
+                ]}
+              >
+                {importing ? 'Importing…' : 'Import'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() =>
+                setNameModal({
+                  mode: 'create',
+                  id: null,
+                  name: nextDefaultName(slideshows),
+                })
+              }
+              disabled={saving}
+            >
+              <Text
+                style={[styles.headerNew, saving && styles.headerNewDisabled]}
+              >
+                ＋ New
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
         <Text style={styles.sectionHeader}>My slideshows</Text>
         {/* Library list: tap a row to make it active. The
@@ -559,6 +630,7 @@ const styles = StyleSheet.create({
   headerTitle: {fontSize: 22, fontWeight: 'bold'},
   headerNew: {fontSize: 16, fontWeight: '600', color: '#007aff'},
   headerNewDisabled: {color: '#ccc'},
+  headerActions: {flexDirection: 'row', gap: 16, alignItems: 'center'},
   sectionHeader: {
     fontSize: 16,
     fontWeight: '700',

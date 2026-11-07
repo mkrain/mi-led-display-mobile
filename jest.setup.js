@@ -79,4 +79,5 @@ jest.mock('@dr.pogodin/react-native-fs', () => ({
   __esModule: true,
   CachesDirectoryPath: '/mock-cache',
   writeFile: jest.fn().mockResolvedValue(undefined),
+  readFile: jest.fn().mockResolvedValue(''),
 }));
