@@ -1,9 +1,10 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
-import {Button, Image, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View} from 'react-native';
+import {Image, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View} from 'react-native';
 import {PixelGrid} from '../components/PixelGrid';
 import {BottomMenu} from '../components/BottomMenu';
 import {AddToSlideshowButton} from '../components/AddToSlideshowButton';
 import {ShareImageButton} from '../components/ShareImageButton';
+import {ActionToolbar, ToolButton} from '../components/ActionToolbar';
 import {loadAutoSend, saveAutoSend} from '../settings/autoSend';
 import {usePhotoState} from '../state/PhotoState';
 import {CropEditor, CROP_TILE_SIZE} from '../components/CropEditor';
@@ -291,12 +292,22 @@ export function PhotoScreen() {
           no gesture responder, scrolling works. On: CropEditor
           owns the tile, pinch/pan commit on release and switch to
           ManualCrop. A plain tap in edit mode does nothing. */}
-      {picked ? (
-        <View style={styles.switchRow}>
-          <Text style={styles.switchLabel}>Edit crop</Text>
-          <Switch value={cropEditing} onValueChange={setCropEditing} />
-        </View>
-      ) : null}
+      {/* Edit crop toggle (Nov 7, 2026, layout stability):
+          always shown, disabled with no photo picked,
+          instead of hidden — hiding it made the page
+          jump when a photo was picked, and hid an
+          available option. The crop editor itself still
+          only renders for a picked photo in edit mode. */}
+      <View style={styles.switchRow}>
+        <Text style={[styles.switchLabel, !picked && styles.switchLabelDisabled]}>
+          Edit crop{!picked ? ' — no photo picked' : ''}
+        </Text>
+        <Switch
+          value={cropEditing}
+          onValueChange={setCropEditing}
+          disabled={!picked}
+        />
+      </View>
       {picked && cropEditing ? (
         <CropEditor
           uri={picked.uri}
@@ -368,6 +379,38 @@ export function PhotoScreen() {
         </View>
       ) : null}
       <PixelGrid pixels={pixels} cellSize={20} />
+      {/* Action toolbar (Nov 7, 2026): Send / Share / Add
+          as three equal tool buttons in the shared
+          ActionToolbar, same row Draw uses — Send to the
+          panel, Share through the sheet, Add to the active
+          slideshow (long-press Add for the picker, or tap
+          it when the active slideshow is full). The
+          full-width Send / Share / Add buttons that used
+          to sit at the bottom are gone; the actions live
+          here now, right under the preview they act on. */}
+      <ActionToolbar>
+        <ToolButton
+          label="Send"
+          icon="📲"
+          onPress={send}
+          disabled={busy}
+          accessibilityLabel="Send to display"
+        />
+        <ShareImageButton
+          label={picked?.fileName ?? 'Demo image'}
+          pixels={pixels}
+          disabled={busy}
+          variant="tool"
+          onResult={setStatus}
+        />
+        <AddToSlideshowButton
+          label={picked?.fileName ?? 'Demo image'}
+          detail={`Photo · ${mode} · Sat ${saturation}`}
+          pixels={pixels}
+          onResult={setStatus}
+          variant="tool"
+        />
+      </ActionToolbar>
       {/* Trim/mode picker, directly under the 16x16 preview
           (Oct 30, 2026 cleanup): it used to sit at the very
           bottom, past the sliders and all the buttons, so the
@@ -459,20 +502,6 @@ export function PhotoScreen() {
           onValueChange={setBrightness}
         />
       </View>
-      <View style={styles.button}>
-        <Button title={busy ? 'Sending…' : 'Send to display'} onPress={send} disabled={busy} />
-      </View>
-      <ShareImageButton
-        label={picked?.fileName ?? 'Demo image'}
-        pixels={pixels}
-        disabled={busy}
-      />
-      <AddToSlideshowButton
-        label={picked?.fileName ?? 'Demo image'}
-        detail={`Photo · ${mode} · Sat ${saturation}`}
-        pixels={pixels}
-        onResult={setStatus}
-      />
     </ScrollView>
     <BottomMenu />
     </View>
@@ -486,8 +515,12 @@ const styles = StyleSheet.create({
   statusWrap: {height: 44, justifyContent: 'center', width: '100%', marginBottom: 8},
   note: {color: '#555', marginBottom: 12, textAlign: 'center'},
   previewTile: {
-    width: 200,
-    height: 200,
+    // 320x320 to match the 16x16 grid below it (16 x 20):
+    // the tile used to be 200x200, noticeably smaller
+    // than Draw's grid, which made the Photo page look
+    // off-scale next to Draw.
+    width: 320,
+    height: 320,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#ccc',
@@ -522,6 +555,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   switchLabel: {fontSize: 15, fontWeight: '600', flex: 1, marginRight: 8},
+  switchLabelDisabled: {color: '#999', fontWeight: '400'},
   switchHint: {fontSize: 12, color: '#555', width: '100%', marginBottom: 8},
   sliderLabel: {fontSize: 14, fontWeight: '600'},
   slider: {width: '100%', height: 40},

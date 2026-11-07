@@ -6,6 +6,7 @@ import {ColorPad} from '../components/ColorPad';
 import {BottomMenu} from '../components/BottomMenu';
 import {AddToSlideshowButton} from '../components/AddToSlideshowButton';
 import {ShareImageButton} from '../components/ShareImageButton';
+import {ActionToolbar, ToolButton} from '../components/ActionToolbar';
 import type {RGB} from '../conversion/convert';
 import {sendFullPicture} from '../ble/device';
 import {blankGrid, useDrawState} from '../state/DrawState';
@@ -132,66 +133,45 @@ export function DrawScreen() {
         onDragStart={() => setScrollEnabled(false)}
         onDragEnd={() => setScrollEnabled(true)}
       />
-      {/* Draw / Erase toggle (Oct 30, 2026 cleanup): a compact
-          segmented toggle with icons, replacing the old
-          full-width Eraser button, with the Clear action as an
-          icon button beside it instead of its own full-width
-          button. Erase paints black — the panel's off state —
-          whatever the selected colour is. Picking any colour
-          switches back to Draw, so a forgotten eraser cannot
-          swallow a colour pick. The tool lives in DrawState,
-          so it survives tab switches like the grid and colour
-          do. No icon library is used (that would need a native
-          rebuild): the glyphs are plain text, ✏️ for draw,
-          🧽 for erase, 🗑️ for clear. Clear keeps its old
-          behaviour — it blanks the grid immediately, with no
-          confirmation, just from a smaller button now. */}
-      <View style={styles.toolRow}>
-        <View style={styles.toolToggle}>
-          <TouchableOpacity
-            style={[
-              styles.toolOption,
-              tool === 'paint' ? styles.toolOptionActive : undefined,
-            ]}
-            onPress={() => setTool('paint')}
-            accessibilityLabel="Draw"
-          >
-            <Text
-              style={[
-                styles.toolOptionText,
-                tool === 'paint' ? styles.toolOptionTextActive : undefined,
-              ]}
-            >
-              ✏️ Draw
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.toolOption,
-              tool === 'erase' ? styles.toolOptionActive : undefined,
-            ]}
-            onPress={() => setTool('erase')}
-            accessibilityLabel="Erase"
-          >
-            <Text
-              style={[
-                styles.toolOptionText,
-                tool === 'erase' ? styles.toolOptionTextActive : undefined,
-              ]}
-            >
-              🧽 Erase
-            </Text>
-          </TouchableOpacity>
-        </View>
-        <TouchableOpacity
-          style={[styles.clearIcon, busy ? styles.clearIconDisabled : undefined]}
+      {/* Tool row (Nov 7, 2026, toolbar): Draw / Erase /
+          Clear / Share as four equal tool buttons in the
+          shared ActionToolbar, same row Photo uses. Draw
+          and Erase are a toggle (active = current tool);
+          Clear blanks the grid immediately, no confirmation;
+          Share opens the share sheet for the current grid.
+          Share feedback goes to the status line at the top
+          (via onResult), since a toolbar row has no room
+          for a note under the button. */}
+      <ActionToolbar>
+        <ToolButton
+          label="Draw"
+          icon="✏️"
+          onPress={() => setTool('paint')}
+          active={tool === 'paint'}
+          accessibilityLabel="Draw"
+        />
+        <ToolButton
+          label="Erase"
+          icon="🧽"
+          onPress={() => setTool('erase')}
+          active={tool === 'erase'}
+          accessibilityLabel="Erase"
+        />
+        <ToolButton
+          label="Clear"
+          icon="🗑️"
           onPress={() => setPixels(blankGrid())}
           disabled={busy}
           accessibilityLabel="Clear grid"
-        >
-          <Text style={styles.clearIconText}>🗑️</Text>
-        </TouchableOpacity>
-      </View>
+        />
+        <ShareImageButton
+          label={editingItem ? editingItem.label : 'Graffiti'}
+          pixels={pixels}
+          disabled={busy}
+          variant="tool"
+          onResult={setStatus}
+        />
+      </ActionToolbar>
       <Text style={styles.label}>Color</Text>
       <ColorPad
         color={color}
@@ -281,11 +261,6 @@ export function DrawScreen() {
       <View style={styles.button}>
         <Button title={busy ? 'Sending…' : 'Send full picture'} onPress={send} disabled={busy} />
       </View>
-      <ShareImageButton
-        label={editingItem ? editingItem.label : 'Graffiti'}
-        pixels={pixels}
-        disabled={busy}
-      />
       <AddToSlideshowButton
         label="Graffiti"
         detail="Draw · 16×16 grid"
@@ -312,40 +287,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   editBannerText: {fontSize: 14, lineHeight: 20, color: '#234', marginBottom: 4},
-  toolRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 12,
-    marginTop: 12,
-    marginBottom: 4,
-  },
-  toolToggle: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  toolOption: {
-    paddingVertical: 8,
-    paddingHorizontal: 20,
-    borderWidth: 1,
-    borderColor: '#999',
-    backgroundColor: '#eee',
-  },
-  toolOptionActive: {backgroundColor: '#007aff', borderColor: '#007aff'},
-  toolOptionText: {fontSize: 16, color: '#333'},
-  toolOptionTextActive: {color: '#fff', fontWeight: '600'},
-  clearIcon: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: '#999',
-    borderRadius: 8,
-    backgroundColor: '#eee',
-  },
-  clearIconDisabled: {opacity: 0.5},
-  clearIconText: {fontSize: 18},
   label: {fontSize: 16, marginTop: 16, marginBottom: 8},
   padHint: {fontSize: 13, color: '#555', textAlign: 'center', marginBottom: 4},
   paletteStrip: {flexDirection: 'row', width: '100%', height: 36, marginVertical: 4},

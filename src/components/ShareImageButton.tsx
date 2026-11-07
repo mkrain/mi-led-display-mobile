@@ -2,6 +2,7 @@ import React, {useState} from 'react';
 import {Button, StyleSheet, Text, View} from 'react-native';
 import type {RGB} from '../conversion/convert';
 import {shareImage} from '../export/shareSlideshowItem';
+import {ToolButton} from './ActionToolbar';
 
 /**
  * "Share image…" button, shared by Draw, Photo, and
@@ -19,12 +20,25 @@ interface ShareImageButtonProps {
   label: string;
   pixels: readonly RGB[];
   disabled?: boolean;
+  /**
+   * 'full' (default): a full-width Button with a status
+   * note under it, as Slideshow uses it. 'tool': a
+   * single tool button for an ActionToolbar row, with
+   * feedback reported through onResult to the screen's
+   * status line instead of a note under the button
+   * (there is no room for one in a toolbar row, and a
+   * note there would shift the layout).
+   */
+  variant?: 'full' | 'tool';
+  onResult?: (message: string) => void;
 }
 
 export function ShareImageButton({
   label,
   pixels,
   disabled = false,
+  variant = 'full',
+  onResult,
 }: ShareImageButtonProps) {
   const [sharing, setSharing] = useState(false);
   const [exportStatus, setExportStatus] = useState<string | null>(null);
@@ -34,21 +48,37 @@ export function ShareImageButton({
       return;
     }
     setSharing(true);
-    setExportStatus('Preparing image…');
+    const report = (message: string) => {
+      setExportStatus(message);
+      onResult?.(message);
+    };
+    report('Preparing image…');
     try {
       const outcome = await shareImage({label, pixels});
-      setExportStatus(
+      report(
         outcome === 'shared'
           ? 'Shared — pick Photos, Files, or another app in the sheet.'
           : 'Share cancelled — nothing was saved.',
       );
     } catch (e) {
-      setExportStatus(
+      report(
         `Share failed: ${e instanceof Error ? e.message : String(e)}`,
       );
     } finally {
       setSharing(false);
     }
+  }
+
+  if (variant === 'tool') {
+    return (
+      <ToolButton
+        label="Share"
+        icon="⤴️"
+        onPress={onShare}
+        disabled={sharing || disabled}
+        accessibilityLabel="Share image"
+      />
+    );
   }
 
   return (

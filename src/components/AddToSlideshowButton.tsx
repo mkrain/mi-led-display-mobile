@@ -9,6 +9,7 @@ import {
 import type {RGB} from '../conversion/convert';
 import {useSlideshowState} from '../state/SlideshowState';
 import {MAX_SLIDESHOW_ITEMS} from '../slideshow/queue';
+import {ToolButton} from './ActionToolbar';
 
 /**
  * Split "Add to slideshow" button, shared by Photo and Draw
@@ -44,6 +45,16 @@ interface AddToSlideshowButtonProps {
   detail: string;
   pixels: RGB[];
   onResult: (message: string) => void;
+  /**
+   * 'full' (default): the split full-width button, main
+   * tap adds to the active slideshow, ▾ opens the picker.
+   * 'tool': a single tool button for an ActionToolbar
+   * row — tap adds to the active slideshow, and the
+   * picker is still reachable: a full target opens it,
+   * and the ▾ is part of the button label. The picker
+   * modal itself is unchanged.
+   */
+  variant?: 'full' | 'tool';
 }
 
 export function AddToSlideshowButton({
@@ -51,6 +62,7 @@ export function AddToSlideshowButton({
   detail,
   pixels,
   onResult,
+  variant = 'full',
 }: AddToSlideshowButtonProps) {
   const {
     slideshows,
@@ -83,6 +95,81 @@ export function AddToSlideshowButton({
 
   const activeName = activeSlideshow?.name ?? 'slideshow';
 
+  // The picker modal is shared by both variants: full
+  // reaches it from the ▾, tool reaches it from a full
+  // target (via report) — and, in tool form, from a
+  // long-press on the Add button, since there is no
+  // room for a separate ▾ in a toolbar row.
+  const pickerModal = (
+    <Modal
+      visible={pickerVisible}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setPickerVisible(false)}
+    >
+      <View style={styles.modalBackdrop}>
+        <View style={styles.modalCard}>
+          <Text style={styles.modalTitle}>Add to which slideshow?</Text>
+          {slideshows.map(s => {
+            const full = s.items.length >= MAX_SLIDESHOW_ITEMS;
+            return (
+              <TouchableOpacity
+                key={s.id}
+                style={styles.pickerRow}
+                onPress={() => {
+                  setPickerVisible(false);
+                  report(
+                    addItemToSlideshow(s.id, label, detail, pixels),
+                  );
+                }}
+              >
+                <Text style={styles.pickerRowText}>
+                  {s.id === activeSlideshow?.id ? '✓ ' : ''}
+                  {s.name} — {s.items.length} {s.items.length === 1 ? 'item' : 'items'}
+                  {full ? ' (full)' : ''}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+          <TouchableOpacity
+            style={styles.pickerRow}
+            onPress={() => {
+              setPickerVisible(false);
+              report(addItemToNewSlideshow(label, detail, pixels));
+            }}
+          >
+            <Text style={[styles.pickerRowText, styles.pickerNew]}>
+              ＋ New slideshow…
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.pickerRow}
+            onPress={() => setPickerVisible(false)}
+          >
+            <Text style={[styles.pickerRowText, styles.pickerCancel]}>
+              Cancel
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+
+  if (variant === 'tool') {
+    return (
+      <>
+        <ToolButton
+          label="Add"
+          icon="＋"
+          onPress={() => report(addItem(label, detail, pixels))}
+          onLongPress={() => setPickerVisible(true)}
+          accessibilityLabel={`Add to ${activeName}`}
+        />
+        {pickerModal}
+      </>
+    );
+  }
+
   return (
     <View style={styles.splitRow}>
       <TouchableOpacity
@@ -98,58 +185,7 @@ export function AddToSlideshowButton({
       >
         <Text style={styles.chevText}>▾</Text>
       </TouchableOpacity>
-      <Modal
-        visible={pickerVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setPickerVisible(false)}
-      >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Add to which slideshow?</Text>
-            {slideshows.map(s => {
-              const full = s.items.length >= MAX_SLIDESHOW_ITEMS;
-              return (
-                <TouchableOpacity
-                  key={s.id}
-                  style={styles.pickerRow}
-                  onPress={() => {
-                    setPickerVisible(false);
-                    report(
-                      addItemToSlideshow(s.id, label, detail, pixels),
-                    );
-                  }}
-                >
-                  <Text style={styles.pickerRowText}>
-                    {s.id === activeSlideshow?.id ? '✓ ' : ''}
-                    {s.name} — {s.items.length} {s.items.length === 1 ? 'item' : 'items'}
-                    {full ? ' (full)' : ''}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-            <TouchableOpacity
-              style={styles.pickerRow}
-              onPress={() => {
-                setPickerVisible(false);
-                report(addItemToNewSlideshow(label, detail, pixels));
-              }}
-            >
-              <Text style={[styles.pickerRowText, styles.pickerNew]}>
-                ＋ New slideshow…
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.pickerRow}
-              onPress={() => setPickerVisible(false)}
-            >
-              <Text style={[styles.pickerRowText, styles.pickerCancel]}>
-                Cancel
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      {pickerModal}
     </View>
   );
 }
