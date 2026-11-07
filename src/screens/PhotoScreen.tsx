@@ -3,6 +3,7 @@ import {Button, Image, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, V
 import {PixelGrid} from '../components/PixelGrid';
 import {BottomMenu} from '../components/BottomMenu';
 import {AddToSlideshowButton} from '../components/AddToSlideshowButton';
+import {ShareImageButton} from '../components/ShareImageButton';
 import {loadAutoSend, saveAutoSend} from '../settings/autoSend';
 import {usePhotoState} from '../state/PhotoState';
 import {CropEditor, CROP_TILE_SIZE} from '../components/CropEditor';
@@ -461,6 +462,11 @@ export function PhotoScreen() {
       <View style={styles.button}>
         <Button title={busy ? 'Sending…' : 'Send to display'} onPress={send} disabled={busy} />
       </View>
+      <ShareImageButton
+        label={picked?.fileName ?? 'Demo image'}
+        pixels={pixels}
+        disabled={busy}
+      />
       <AddToSlideshowButton
         label={picked?.fileName ?? 'Demo image'}
         detail={`Photo · ${mode} · Sat ${saturation}`}

@@ -5,10 +5,13 @@ import type {RGB} from '../conversion/convert';
 import {pixelsToPng} from './encodePng';
 
 /**
- * Share one slideshow item through the system share sheet
- * (Nov 6, 2026, first export pass).
+ * Share one 16x16 image through the system share sheet
+ * (Nov 6, 2026, first export pass; Nov 7, 2026: generalised
+ * from slideshow-only to any pixels — Draw and Photo share
+ * the same helper, so sharing never requires adding to a
+ * slideshow first).
  *
- * The item is rendered to an upscaled PNG, written to the
+ * The image is rendered to an upscaled PNG, written to the
  * app's internal cache directory, and handed to
  * react-native-share. The cache directory matters: on
  * Android, react-native-share's FileProvider only exposes
@@ -35,7 +38,7 @@ export function shareFileName(label: string): string {
   return `mi-led-${cleaned || 'image'}.png`;
 }
 
-export async function shareSlideshowItem(item: {
+export async function shareImage(item: {
   label: string;
   pixels: readonly RGB[];
 }): Promise<ShareItemOutcome> {
@@ -65,3 +68,6 @@ export async function shareSlideshowItem(item: {
     throw e;
   }
 }
+
+/** Old name, kept for the slideshow screen's tests. */
+export const shareSlideshowItem = shareImage;

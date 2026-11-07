@@ -5,6 +5,7 @@ import {PixelGrid, rgbToCss} from '../components/PixelGrid';
 import {ColorPad} from '../components/ColorPad';
 import {BottomMenu} from '../components/BottomMenu';
 import {AddToSlideshowButton} from '../components/AddToSlideshowButton';
+import {ShareImageButton} from '../components/ShareImageButton';
 import type {RGB} from '../conversion/convert';
 import {sendFullPicture} from '../ble/device';
 import {blankGrid, useDrawState} from '../state/DrawState';
@@ -280,6 +281,11 @@ export function DrawScreen() {
       <View style={styles.button}>
         <Button title={busy ? 'Sending…' : 'Send full picture'} onPress={send} disabled={busy} />
       </View>
+      <ShareImageButton
+        label={editingItem ? editingItem.label : 'Graffiti'}
+        pixels={pixels}
+        disabled={busy}
+      />
       <AddToSlideshowButton
         label="Graffiti"
         detail="Draw · 16×16 grid"

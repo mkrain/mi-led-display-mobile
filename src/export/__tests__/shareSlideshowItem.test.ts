@@ -1,7 +1,7 @@
 import Share from 'react-native-share';
 import {writeFile} from '@dr.pogodin/react-native-fs';
 import base64js from 'base64-js';
-import {shareFileName, shareSlideshowItem} from '../shareSlideshowItem';
+import {shareFileName, shareImage, shareSlideshowItem} from '../shareSlideshowItem';
 import type {RGB} from '../../conversion/convert';
 
 const mockOpen = Share.open as jest.Mock;
@@ -60,6 +60,23 @@ describe('shareSlideshowItem', () => {
       pixels: blackPixels(),
     });
     expect(outcome).toBe('cancelled');
+  });
+
+  test('shareImage is the same share path, usable from Draw and Photo', async () => {
+    // Draw shares its grid as "Graffiti", Photo shares its
+    // converted preview under the photo filename — both go
+    // through the same helper, with no slideshow involved.
+    const outcome = await shareImage({
+      label: 'Graffiti',
+      pixels: blackPixels(),
+    });
+    expect(outcome).toBe('shared');
+    expect(mockWriteFile).toHaveBeenCalledWith(
+      '/mock-cache/mi-led-graffiti.png',
+      expect.any(String),
+      'base64',
+    );
+    expect(shareSlideshowItem).toBe(shareImage);
   });
 
   test('a cancel thrown as an error is a cancel, other errors throw', async () => {

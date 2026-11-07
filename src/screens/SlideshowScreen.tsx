@@ -18,7 +18,7 @@ import {StackActions, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '../../App';
 import {saveSlideshowReplace} from '../ble/device';
-import {shareSlideshowItem} from '../export/shareSlideshowItem';
+import {ShareImageButton} from '../components/ShareImageButton';
 import type {RGB} from '../conversion/convert';
 import {MAX_SLIDESHOW_ITEMS} from '../slideshow/queue';
 import {nextDefaultName} from '../slideshow/library';
@@ -69,37 +69,9 @@ export function SlideshowScreen() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
-  // Share export (Nov 6, 2026): one selected item at a
-  // time, through the system share sheet. Local feedback
-  // lives here, next to the button, not in saveStatus at
-  // the bottom of the screen.
-  const [sharing, setSharing] = useState(false);
-  const [exportStatus, setExportStatus] = useState<string | null>(null);
-
-  async function onShareSelected() {
-    if (!selected || sharing) {
-      return;
-    }
-    setSharing(true);
-    setExportStatus('Preparing image…');
-    try {
-      const outcome = await shareSlideshowItem({
-        label: selected.label,
-        pixels: selected.pixels,
-      });
-      setExportStatus(
-        outcome === 'shared'
-          ? 'Shared — pick Photos, Files, or another app in the sheet.'
-          : 'Share cancelled — nothing was saved.',
-      );
-    } catch (e) {
-      setExportStatus(
-        `Share failed: ${e instanceof Error ? e.message : String(e)}`,
-      );
-    } finally {
-      setSharing(false);
-    }
-  }
+  // Share export lives in ShareImageButton now (Nov 7,
+  // 2026): same button and feedback as Draw and Photo,
+  // no local sharing state here.
   // Name modal, shared by create and rename: mode 'create'
   // prefill is the next default name, mode 'rename' prefill
   // is the slideshow's current name.
@@ -392,16 +364,11 @@ export function SlideshowScreen() {
                     }}
                   />
                 </View>
-                <View style={styles.button}>
-                  <Button
-                    title={sharing ? 'Preparing…' : 'Share image…'}
-                    onPress={onShareSelected}
-                    disabled={sharing || saving}
-                  />
-                </View>
-                {exportStatus ? (
-                  <Text style={styles.note}>{exportStatus}</Text>
-                ) : null}
+                <ShareImageButton
+                  label={selected.label}
+                  pixels={selected.pixels}
+                  disabled={saving}
+                />
               </View>
             ) : null}
             {items.map((item, index) => (
