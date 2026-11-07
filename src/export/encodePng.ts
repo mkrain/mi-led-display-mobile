@@ -1,6 +1,7 @@
 /* eslint-disable no-bitwise -- CRC32, Adler-32, and the zlib
  * stored-block header are bitwise by definition. */
 import type {RGB} from '../conversion/convert';
+import {GLYPH_HEIGHT, GLYPH_WIDTH, glyphFor} from './pixelFont';
 
 /**
  * Pure-JS PNG encoder for a 16x16 slideshow item
@@ -178,15 +179,54 @@ export function spriteSheetGrid(count: number): {
 }
 
 /**
+ * Header strip (Nov 7, 2026): the slideshow name drawn
+ * as pixel text across the top of the sheet, so the
+ * sheet identifies itself even when Photos renames the
+ * file to IMG_XXXX on Save Image. White 5x7 glyphs,
+ * scaled 4x (20x28 per glyph, 24 per character with
+ * spacing), vertically centred in a 64px strip. The
+ * title is capped to the strip width; the tiles below
+ * are untouched, so the header never shifts the order.
+ */
+export const SPRITE_SHEET_HEADER_HEIGHT = 64;
+export const SPRITE_SHEET_HEADER_SCALE = 4;
+const HEADER_MARGIN = 16;
+
+function headerText(title: string, width: number): string {
+  const advance = (GLYPH_WIDTH + 1) * SPRITE_SHEET_HEADER_SCALE;
+  const maxChars = Math.max(
+    1,
+    Math.floor((width - HEADER_MARGIN * 2) / advance),
+  );
+  return title.toUpperCase().slice(0, maxChars);
+}
+
+/** Total PNG size for a sheet, header included when titled. */
+export function spriteSheetSize(
+  count: number,
+  title = '',
+): {width: number; height: number} {
+  const grid = spriteSheetGrid(count);
+  return {
+    width: grid.width,
+    height:
+      grid.height + (title ? SPRITE_SHEET_HEADER_HEIGHT : 0),
+  };
+}
+
+/**
  * Raw scanlines for a sprite sheet: tiles left to right,
  * top to bottom, in slideshow order, each tile upscaled
  * like a single export. Cells past the last item stay
  * black (panel-off), so a 7-item sheet has three black
- * cells at the end of its second row. Exported for tests,
- * so tile placement can be checked without parsing a PNG.
+ * cells at the end of its second row. With a title, a
+ * header strip is drawn first and the tiles start below
+ * it. Exported for tests, so tile placement can be
+ * checked without parsing a PNG.
  */
 export function buildSpriteSheetScanlines(
   items: readonly (readonly RGB[])[],
+  title = '',
   scale = DEFAULT_SCALE,
 ): Uint8Array {
   for (const pixels of items) {
@@ -198,12 +238,41 @@ export function buildSpriteSheetScanlines(
   }
   const {columns, rows} = spriteSheetGrid(items.length);
   const tileSize = SOURCE_SIZE * scale;
+  const headerHeight = title ? SPRITE_SHEET_HEADER_HEIGHT : 0;
   const width = columns * tileSize;
-  const height = rows * tileSize;
+  const height = rows * tileSize + headerHeight;
   const rowBytes = width * 3;
   const out = new Uint8Array(height * (rowBytes + 1));
-  for (let y = 0; y < height; y += 1) {
-    const rowStart = y * (rowBytes + 1);
+  if (title) {
+    // Header text: white glyphs on the black strip.
+    const text = headerText(title, width);
+    const glyphH = GLYPH_HEIGHT * SPRITE_SHEET_HEADER_SCALE;
+    const y0 = Math.floor((SPRITE_SHEET_HEADER_HEIGHT - glyphH) / 2);
+    const advance = (GLYPH_WIDTH + 1) * SPRITE_SHEET_HEADER_SCALE;
+    for (let c = 0; c < text.length; c += 1) {
+      const glyph = glyphFor(text[c]);
+      const x0 = HEADER_MARGIN + c * advance;
+      for (let gy = 0; gy < GLYPH_HEIGHT; gy += 1) {
+        for (let gx = 0; gx < GLYPH_WIDTH; gx += 1) {
+          if (glyph[gy][gx] !== '#') {
+            continue;
+          }
+          for (let sy = 0; sy < SPRITE_SHEET_HEADER_SCALE; sy += 1) {
+            for (let sx = 0; sx < SPRITE_SHEET_HEADER_SCALE; sx += 1) {
+              const x = x0 + gx * SPRITE_SHEET_HEADER_SCALE + sx;
+              const y = y0 + gy * SPRITE_SHEET_HEADER_SCALE + sy;
+              const i = y * (rowBytes + 1) + 1 + x * 3;
+              out[i] = 255;
+              out[i + 1] = 255;
+              out[i + 2] = 255;
+            }
+          }
+        }
+      }
+    }
+  }
+  for (let y = 0; y < rows * tileSize; y += 1) {
+    const rowStart = (y + headerHeight) * (rowBytes + 1);
     out[rowStart] = 0;
     const tileRow = Math.floor(y / tileSize);
     const srcY = Math.floor((y % tileSize) / scale);
@@ -221,19 +290,38 @@ export function buildSpriteSheetScanlines(
   return out;
 }
 
-/** A whole slideshow as one PNG sprite sheet. */
+/**
+ * A whole slideshow as one PNG sprite sheet. With a
+ * title, the sheet gets a header strip with the name
+ * drawn in, and a PNG `tEXt` Title chunk carrying the
+ * same name for tools that read metadata — the chunk
+ * is belt and braces, not the fix: Photos does not
+ * show it, and whether Photos keeps it on Save Image
+ * is unverified, so the visible header is what the
+ * name relies on.
+ */
 export function itemsToSpriteSheetPng(
   items: readonly (readonly RGB[])[],
+  title = '',
   scale = DEFAULT_SCALE,
 ): Uint8Array {
-  const {width, height} = spriteSheetGrid(items.length);
-  return pngFromScanlines(width, height, buildSpriteSheetScanlines(items, scale));
+  const {width, height} = spriteSheetSize(items.length, title);
+  const textChunks = title
+    ? [{keyword: 'Title', text: title}]
+    : [];
+  return pngFromScanlines(
+    width,
+    height,
+    buildSpriteSheetScanlines(items, title, scale),
+    textChunks,
+  );
 }
 
 function pngFromScanlines(
   width: number,
   height: number,
   scanlines: Uint8Array,
+  textChunks: {keyword: string; text: string}[] = [],
 ): Uint8Array {
   const ihdr = new Uint8Array(13);
   const ihdrView = new DataView(ihdr.buffer);
@@ -248,6 +336,10 @@ function pngFromScanlines(
   const parts = [
     Uint8Array.from(PNG_SIGNATURE),
     chunk('IHDR', ihdr),
+    // tEXt chunks go between IHDR and IDAT. Latin-1
+    // only: anything outside it becomes '?', so the
+    // chunk never breaks the file on a long or odd name.
+    ...textChunks.map(c => chunk('tEXt', textChunkData(c.keyword, c.text))),
     chunk('IDAT', idat),
     chunk('IEND', new Uint8Array(0)),
   ];
@@ -259,4 +351,18 @@ function pngFromScanlines(
     offset += part.length;
   }
   return out;
+}
+
+/** `keyword\0text`, both Latin-1, for a PNG tEXt chunk. */
+function textChunkData(keyword: string, text: string): Uint8Array {
+  const latin1 = (s: string) =>
+    Array.from(s, ch => {
+      const code = ch.charCodeAt(0);
+      return code >= 32 && code <= 126 ? code : 63; // '?' otherwise
+    });
+  const data = new Uint8Array(keyword.length + 1 + text.length);
+  data.set(latin1(keyword), 0);
+  data[keyword.length] = 0;
+  data.set(latin1(text), keyword.length + 1);
+  return data;
 }

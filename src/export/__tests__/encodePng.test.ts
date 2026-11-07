@@ -237,4 +237,50 @@ describe('Sprite sheet', () => {
       'Expected 256 pixels',
     );
   });
+
+  test('a title adds a header strip and a tEXt Title chunk', () => {
+    // 'A' glyph, row 0 is .###. — first pixel column is
+    // off, second is on — scaled 4x from x=16, y=18.
+    const scanlines = buildSpriteSheetScanlines(
+      [solidPixels([255, 0, 0])],
+      'A',
+    );
+    expect(pixelAt(scanlines, 1280, 16, 18)).toEqual([0, 0, 0]);
+    expect(pixelAt(scanlines, 1280, 20, 18)).toEqual([255, 255, 255]);
+    expect(pixelAt(scanlines, 1280, 23, 21)).toEqual([255, 255, 255]);
+    // Tiles start below the 64px header.
+    expect(pixelAt(scanlines, 1280, 0, 64)).toEqual([255, 0, 0]);
+    expect(pixelAt(scanlines, 1280, 0, 63)).toEqual([0, 0, 0]);
+
+    const png = itemsToSpriteSheetPng(
+      [solidPixels([255, 0, 0])],
+      'My slideshow',
+    );
+    const chunks = parseChunks(png);
+    expect(chunks.map(c => c.type)).toEqual([
+      'IHDR',
+      'tEXt',
+      'IDAT',
+      'IEND',
+    ]);
+    const view = new DataView(
+      chunks[0].data.buffer,
+      chunks[0].data.byteOffset,
+      chunks[0].data.length,
+    );
+    expect(view.getUint32(0, false)).toBe(1280);
+    expect(view.getUint32(4, false)).toBe(320);
+    const text = chunks[1].data;
+    expect(String.fromCharCode(...text.subarray(0, 5))).toBe('Title');
+    expect(text[5]).toBe(0);
+    expect(String.fromCharCode(...text.subarray(6))).toBe('My slideshow');
+    for (const chunk of chunks) {
+      const crcData = new Uint8Array(4 + chunk.data.length);
+      for (let i = 0; i < 4; i += 1) {
+        crcData[i] = chunk.type.charCodeAt(i);
+      }
+      crcData.set(chunk.data, 4);
+      expect(chunk.crc).toBe(crc32(crcData));
+    }
+  });
 });

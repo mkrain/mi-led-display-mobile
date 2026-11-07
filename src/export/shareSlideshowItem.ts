@@ -61,7 +61,7 @@ export async function shareSpriteSheet(slideshow: {
 }): Promise<ShareItemOutcome> {
   return sharePngBytes(
     shareFileName(`${slideshow.name}-sheet`),
-    itemsToSpriteSheetPng(slideshow.items),
+    itemsToSpriteSheetPng(slideshow.items, slideshow.name),
   );
 }
 

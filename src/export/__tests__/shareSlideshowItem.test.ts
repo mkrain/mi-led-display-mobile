@@ -115,14 +115,14 @@ describe('shareSpriteSheet', () => {
     expect(path).toBe('/mock-cache/mi-led-my-slideshow-sheet.png');
     expect(encoding).toBe('base64');
     // Decode the written PNG and check its size: 2 items
-    // in one row is 1280x256.
+    // in one row is 1280x256, plus the 64px header strip.
     const bytes = base64js.toByteArray(data as string);
     expect(Array.from(bytes.subarray(0, 8))).toEqual([
       137, 80, 78, 71, 13, 10, 26, 10,
     ]);
     const view = new DataView(bytes.buffer, bytes.byteOffset + 16, 8);
     expect(view.getUint32(0, false)).toBe(1280);
-    expect(view.getUint32(4, false)).toBe(256);
+    expect(view.getUint32(4, false)).toBe(320);
     expect(mockOpen).toHaveBeenCalledWith({
       url: 'file:///mock-cache/mi-led-my-slideshow-sheet.png',
       type: 'image/png',
