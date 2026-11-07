@@ -18,6 +18,19 @@ import ImageCropPicker from 'react-native-image-crop-picker';
  * empty — reading it returns zero bytes, which the
  * decoder then (correctly) rejects as "Not a PNG".
  *
+ * `multiple: true` is deliberate, not a mistake.
+ * The library's single-pick path always runs its
+ * JPEG compressor, whatever the source format —
+ * that is why Photos' PNG came back as JPEG.
+ * The multi-pick path checks the original data
+ * first and, with the default quality (0.8, the
+ * lossless threshold), no resize, a known mime
+ * and forceJpg off, returns the original bytes
+ * untouched. So we open the multi picker and take
+ * the first result. The only cost is the picker
+ * UI: select the sheet, then tap Done, instead
+ * of tap-to-pick.
+ *
  * Photos converts: a sheet saved to Photos with Save
  * Image comes back as JPEG, not PNG, so both mimes
  * are accepted here. JPEG is lossy — colours may
@@ -41,12 +54,12 @@ export type PickedFile = {
 const SUPPORTED_MIMES = ['image/png', 'image/jpeg'];
 
 export async function pickImageFile(): Promise<PickedFile | null> {
-  let picked;
+  let result;
   try {
-    picked = await ImageCropPicker.openPicker({
+    result = await ImageCropPicker.openPicker({
       mediaType: 'photo',
       cropping: false,
-      multiple: false,
+      multiple: true,
       includeBase64: true,
     });
   } catch (e) {
@@ -60,6 +73,13 @@ export async function pickImageFile(): Promise<PickedFile | null> {
     throw new Error(
       `Photo pick failed: ${e instanceof Error ? e.message : String(e)}`,
     );
+  }
+  // multiple:true resolves an array; take the first
+  // selection (the sheet). Tolerate a single object
+  // in case a future library version changes shape.
+  const picked = Array.isArray(result) ? result[0] : result;
+  if (!picked) {
+    return null;
   }
   if (picked.mime && !SUPPORTED_MIMES.includes(picked.mime)) {
     throw new Error(
