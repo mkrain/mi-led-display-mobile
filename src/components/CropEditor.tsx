@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import {maxPan} from '../photos/cropBox';
 
-export const CROP_TILE_SIZE = 200;
+export const CROP_TILE_SIZE = 320;
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 4;
 
@@ -302,7 +302,8 @@ const styles = StyleSheet.create({
   tile: {
     width: CROP_TILE_SIZE,
     height: CROP_TILE_SIZE,
-    borderRadius: 12,
+    // Square, like Draw's grid and the preview tile.
+    borderRadius: 0,
     borderWidth: 1,
     borderColor: '#ccc',
     backgroundColor: '#e5e5ea',

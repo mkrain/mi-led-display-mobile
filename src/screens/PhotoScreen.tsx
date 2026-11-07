@@ -106,7 +106,7 @@ export function PhotoScreen() {
   // pinch moves the photo, not the whole screen — and unlocked
   // between gestures, so the form always scrolls normally.
   const [cropGestureActive, setCropGestureActive] = useState(false);
-  const [status, setStatus] = useState('Ready.');
+  const [status, setStatus] = useState('Pick a photo, then Send.');
   const [busy, setBusy] = useState(false);
 
   const source: RgbaImage = useMemo(
@@ -166,7 +166,7 @@ export function PhotoScreen() {
     autoSendRef.current = enabled;
     await saveAutoSend(enabled);
     if (enabled) {
-      setStatus('Auto-send on: changes will send to the display.');
+      setStatus('Auto-send on.');
     }
   }
 
@@ -283,7 +283,7 @@ export function PhotoScreen() {
           pushed the toggle, tile, and grid up or down. Height 44
           holds two 16 pt lines, so siblings never move. */}
       <View style={styles.statusWrap}>
-        <Text style={styles.status} numberOfLines={2}>{status}</Text>
+        <Text style={styles.status} numberOfLines={1}>{status}</Text>
       </View>
       {/* Crop editor / picker tile, split by an explicit mode toggle
           (Oct 29, 2026: tap, drag, and page-scroll fought each other
@@ -292,22 +292,6 @@ export function PhotoScreen() {
           no gesture responder, scrolling works. On: CropEditor
           owns the tile, pinch/pan commit on release and switch to
           ManualCrop. A plain tap in edit mode does nothing. */}
-      {/* Edit crop toggle (Nov 7, 2026, layout stability):
-          always shown, disabled with no photo picked,
-          instead of hidden — hiding it made the page
-          jump when a photo was picked, and hid an
-          available option. The crop editor itself still
-          only renders for a picked photo in edit mode. */}
-      <View style={styles.switchRow}>
-        <Text style={[styles.switchLabel, !picked && styles.switchLabelDisabled]}>
-          Edit crop{!picked ? ' — no photo picked' : ''}
-        </Text>
-        <Switch
-          value={cropEditing}
-          onValueChange={setCropEditing}
-          disabled={!picked}
-        />
-      </View>
       {picked && cropEditing ? (
         <CropEditor
           uri={picked.uri}
@@ -409,6 +393,20 @@ export function PhotoScreen() {
           pixels={pixels}
           onResult={setStatus}
           variant="tool"
+        />
+        {/* Edit crop as a toggle button in the toolbar
+            (Nov 7, 2026), not a label plus a separate
+            on/off switch: same ToolButton as the rest of
+            the row, active while editing, disabled with
+            no photo picked. The crop editor itself still
+            only renders for a picked photo in edit mode. */}
+        <ToolButton
+          label="Crop"
+          icon="✂️"
+          onPress={() => setCropEditing(!cropEditing)}
+          active={cropEditing}
+          disabled={!picked}
+          accessibilityLabel="Edit crop"
         />
       </ActionToolbar>
       {/* Trim/mode picker, directly under the 16x16 preview
@@ -512,7 +510,12 @@ const styles = StyleSheet.create({
   screen: {flex: 1},
   container: {padding: 16, alignItems: 'center'},
   status: {fontSize: 16, textAlign: 'center'},
-  statusWrap: {height: 44, justifyContent: 'center', width: '100%', marginBottom: 8},
+  // Single-line status (Nov 7, 2026): the old 44px
+  // two-line wrap made "Ready." look odd and took up
+  // a lot of space. One line, 24px, still fixed height
+  // so a status change never pushes the page — same
+  // jitter rule as before, just smaller.
+  statusWrap: {height: 24, justifyContent: 'center', width: '100%', marginBottom: 8},
   note: {color: '#555', marginBottom: 12, textAlign: 'center'},
   previewTile: {
     // 320x320 to match the 16x16 grid below it (16 x 20):
@@ -521,7 +524,10 @@ const styles = StyleSheet.create({
     // off-scale next to Draw.
     width: 320,
     height: 320,
-    borderRadius: 12,
+    // Square, like Draw's grid: the tile used to be
+    // rounded (borderRadius 12), which looked off next
+    // to Draw's square grid.
+    borderRadius: 0,
     borderWidth: 1,
     borderColor: '#ccc',
     backgroundColor: '#e5e5ea',
@@ -555,7 +561,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   switchLabel: {fontSize: 15, fontWeight: '600', flex: 1, marginRight: 8},
-  switchLabelDisabled: {color: '#999', fontWeight: '400'},
   switchHint: {fontSize: 12, color: '#555', width: '100%', marginBottom: 8},
   sliderLabel: {fontSize: 14, fontWeight: '600'},
   slider: {width: '100%', height: 40},
