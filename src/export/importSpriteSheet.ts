@@ -1,5 +1,5 @@
 import type {RGB} from '../conversion/convert';
-import type {DecodedPng} from './decodePng';
+import type {DecodedImage} from './decodePng';
 import {
   EXPORT_SIZE,
   SOURCE_SIZE,
@@ -121,7 +121,7 @@ function readHeaderText(
   return trimmed.length > 0 ? trimmed : null;
 }
 
-export function importSpriteSheet(png: DecodedPng): ImportedSheet {
+export function importSpriteSheet(png: DecodedImage): ImportedSheet {
   const {width, height, pixels} = png;
   if (width !== SPRITE_SHEET_COLUMNS * EXPORT_SIZE) {
     throw new Error(

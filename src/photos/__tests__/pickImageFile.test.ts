@@ -1,21 +1,22 @@
 import ImageCropPicker from 'react-native-image-crop-picker';
-import {pickPngFile} from '../pickPngFile';
+import {pickImageFile} from '../pickImageFile';
 
 const mockOpenPicker = ImageCropPicker.openPicker as jest.Mock;
 
-describe('pickPngFile', () => {
+describe('pickImageFile', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  test('returns the picked bytes, byte-identical', async () => {
+  test('returns the picked file, mime and base64', async () => {
     mockOpenPicker.mockResolvedValue({
       mime: 'image/png',
       data: 'aGVsbG8=',
       filename: 'sheet.png',
     });
-    const picked = await pickPngFile();
-    expect(picked?.bytes).toEqual(new Uint8Array([104, 101, 108, 108, 111]));
+    const picked = await pickImageFile();
+    expect(picked?.mime).toBe('image/png');
+    expect(picked?.base64).toBe('aGVsbG8=');
     expect(picked?.fileName).toBe('sheet.png');
     expect(mockOpenPicker).toHaveBeenCalledWith({
       mediaType: 'photo',
@@ -27,19 +28,27 @@ describe('pickPngFile', () => {
 
   test('a cancelled pick is null, not an error', async () => {
     mockOpenPicker.mockRejectedValue(new Error('cancelled'));
-    await expect(pickPngFile()).resolves.toBeNull();
+    await expect(pickImageFile()).resolves.toBeNull();
   });
 
-  test('a non-PNG mime and missing data throw plainly', async () => {
+  test('JPEG is accepted, other mimes and missing data throw plainly', async () => {
     mockOpenPicker.mockResolvedValue({
       mime: 'image/jpeg',
       data: 'aGVsbG8=',
     });
-    await expect(pickPngFile()).rejects.toThrow(
-      'Picked file is image/jpeg, not a PNG',
+    await expect(pickImageFile()).resolves.toMatchObject({
+      mime: 'image/jpeg',
+    });
+
+    mockOpenPicker.mockResolvedValue({
+      mime: 'image/heic',
+      data: 'aGVsbG8=',
+    });
+    await expect(pickImageFile()).rejects.toThrow(
+      'Picked file is image/heic; only PNG and JPEG',
     );
 
     mockOpenPicker.mockResolvedValue({mime: 'image/png'});
-    await expect(pickPngFile()).rejects.toThrow('no image data');
+    await expect(pickImageFile()).rejects.toThrow('no image data');
   });
 });

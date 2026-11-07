@@ -20,9 +20,9 @@ import type {RootStackParamList} from '../../App';
 import {saveSlideshowReplace} from '../ble/device';
 import {ShareImageButton} from '../components/ShareImageButton';
 import {shareSpriteSheet} from '../export/shareSlideshowItem';
-import {decodePng} from '../export/decodePng';
+import {decodePickedImage} from '../export/decodeImage';
 import {importSpriteSheet} from '../export/importSpriteSheet';
-import {pickPngFile} from '../photos/pickPngFile';
+import {pickImageFile} from '../photos/pickImageFile';
 import type {RGB} from '../conversion/convert';
 import {MAX_SLIDESHOW_ITEMS} from '../slideshow/queue';
 import {nextDefaultName, type Slideshow} from '../slideshow/library';
@@ -92,12 +92,17 @@ export function SlideshowScreen() {
       // Source-agnostic import: the picker supplies bytes,
       // the decode/split work on bytes alone — a Files
       // picker later just supplies bytes to the same path.
-      const picked = await pickPngFile();
+      // Photos converts a saved PNG sheet to JPEG, so
+      // both mimes decode here; JPEG is lossy, so colours
+      // may shift slightly and the name may fall back.
+      const picked = await pickImageFile();
       if (!picked) {
         setSaveStatus('Import cancelled.');
         return;
       }
-      const sheet = importSpriteSheet(decodePng(picked.bytes));
+      const sheet = importSpriteSheet(
+        decodePickedImage(picked.mime, picked.base64),
+      );
       const name = sheet.name ?? 'Imported slideshow';
       const id = importSlideshow(
         name,

@@ -26,7 +26,7 @@ import type {RGB} from '../conversion/convert';
  * Anything outside that throws a plain message naming
  * what was unsupported, instead of a mangled import.
  */
-export type DecodedPng = {
+export type DecodedImage = {
   width: number;
   height: number;
   /** Row-major RGB, one triple per pixel, alpha dropped. */
@@ -54,7 +54,7 @@ function chunkType(data: Uint8Array, offset: number): string {
   );
 }
 
-export function decodePng(bytes: Uint8Array): DecodedPng {
+export function decodePng(bytes: Uint8Array): DecodedImage {
   if (
     bytes.length < 8 ||
     !PNG_SIGNATURE.every((b, i) => bytes[i] === b)
