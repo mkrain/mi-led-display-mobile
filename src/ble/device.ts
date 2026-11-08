@@ -27,6 +27,7 @@ import {
   SERVICE_UUID,
   type PixelGrid,
   fullPictureCommands,
+  lampAllSlotsCommands,
   lampSlotSaveCommands,
   resetCommand,
   resetSavedPictureCommands,
@@ -540,23 +541,38 @@ export async function saveStaticPictureToDevice(
  * between the 0x02 writes.
  */
 export async function saveLampColor(pixels: PixelGrid): Promise<void> {
-  const commands = lampSlotSaveCommands(pixels);
-  await writeCommand(commands[0]); // 0x11 enable
-  await sleep(50);
-  await writeCommand(commands[1]); // 0x02 enable(1)
-  await sleep(5);
-  for (const chunk of commands.slice(2, -4)) {
-    await writeCommand(chunk);
-    await sleep(5);
+  await saveLampCommands(lampSlotSaveCommands(pixels));
+}
+
+/**
+ * Lamp all-slots save (Nov 8, 2026): the same colour in all
+ * 8 slots, count 8. The slot save proved a count-1 write
+ * appends — the colour appeared at the end of the cycle —
+ * so this tests whether a full 8-image transfer defines
+ * the set. No Reset, so the link never drops.
+ */
+export async function saveLampColorAllSlots(
+  pixels: PixelGrid,
+): Promise<void> {
+  await saveLampCommands(lampAllSlotsCommands(pixels));
+}
+
+/**
+ * Write a Lamp 0x02 sequence: 50 ms after the 0x11 bracket
+ * commands (first and second-to-last), 5 ms between the
+ * 0x02 writes, 2 ms after the trailing slideshow mode.
+ */
+async function saveLampCommands(commands: number[][]): Promise<void> {
+  for (let i = 0; i < commands.length; i++) {
+    await writeCommand(commands[i]);
+    if (i === 0 || i === commands.length - 2) {
+      await sleep(50);
+    } else if (i === commands.length - 1) {
+      await sleep(2);
+    } else {
+      await sleep(5);
+    }
   }
-  await writeCommand(commands[commands.length - 4]); // marker
-  await sleep(5);
-  await writeCommand(commands[commands.length - 3]); // 0x02 disable(1)
-  await sleep(5);
-  await writeCommand(commands[commands.length - 2]); // 0x11 disable
-  await sleep(50);
-  await writeCommand(commands[commands.length - 1]); // slideshow mode
-  await sleep(2);
 }
 
 /**

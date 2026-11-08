@@ -315,11 +315,11 @@ export function resetSavedPictureCommands(pixels: PixelGrid): number[][] {
 // each new colour replaces the set instead of appending.
 // Checksum rule here is SpawnDev's plain truncated sum of
 // the bytes after BC — the same rule as the proven stored
-// blocks. Note the stock 0x11 open/close use sum+1, not
-// plain sum, so if the panel ignores this sequence, the
-// first variation is sum+1 on the short 0x02 commands.
-// Chunk checksum: sum of 0x02 + index + chunk + 96 pixel
-// bytes, mod 256 (plain sum, like stored blocks).
+// blocks. Device-proven Nov 8, 2026: the slot save's plain-sum
+// 0x02 writes were accepted (the colour appeared at the end
+// of the cycle), so the sum+1 variation is dead. Chunk
+// checksum: sum of 0x02 + index + chunk + 96 pixel bytes,
+// mod 256 (plain sum, like stored blocks).
 // Timings follow SpawnDev: 5 ms between 0x02 writes, 50 ms
 // after the 0x11 bracket commands.
 
@@ -396,6 +396,50 @@ export function lampSlotSaveCommands(pixels: PixelGrid): number[][] {
   commands.push(
     slideShowMarkerCommand(),
     slideShowImageWriteDisableCommand(1),
+    saveCloseCommand(),
+    slideshowCommand(),
+  );
+  return commands;
+}
+
+/**
+ * The Lamp all-slots sequence (70 commands): the same colour
+ * written to all 8 slots, count 8, indices 1-8. The slot save
+ * proved a count-1 write appends — the colour appeared at the
+ * end of the cycle — so a single slot cannot make the panel
+ * static. SpawnDev's own save flow always writes exactly 8
+ * images, count 8, indices 1-8, after a Reset; this is that
+ * transfer without the Reset. If a full 8-image transfer
+ * defines the set, the whole cycle is one colour and reads
+ * as static. If it appends instead, the cycle still shows
+ * old images and the lamp mechanism is something else
+ * entirely — a live send, or a dedicated command only a
+ * capture of the stock app will show.
+ */
+export function lampAllSlotsCommands(pixels: PixelGrid): number[][] {
+  if (pixels.length !== PIXEL_COUNT) {
+    throw new Error(
+      `pixels must contain exactly 256 RGB tuples, got ${pixels.length}`,
+    );
+  }
+  const commands: number[][] = [
+    saveOpenCommand(),
+    slideShowImageWriteEnableCommand(8),
+  ];
+  for (let image = 1; image <= 8; image++) {
+    for (let block = 0; block < BLOCK_COUNT; block++) {
+      commands.push(
+        slideShowImageWriteChunkCommand(
+          image,
+          block + 1,
+          pixels.slice(block * 32, block * 32 + 32),
+        ),
+      );
+    }
+  }
+  commands.push(
+    slideShowMarkerCommand(),
+    slideShowImageWriteDisableCommand(8),
     saveCloseCommand(),
     slideshowCommand(),
   );

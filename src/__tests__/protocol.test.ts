@@ -3,6 +3,7 @@ import {
   fullPictureBlockCommand,
   fullPictureCommands,
   graffitiInitCommands,
+  lampAllSlotsCommands,
   lampSlotSaveCommands,
   powerOffCommand,
   powerOnCommand,
@@ -193,6 +194,39 @@ describe('protocol bytes', () => {
         9,
         Array.from({length: 32}, () => [0, 0, 0] as RGB),
       ),
+    ).toThrow();
+  });
+
+  test('lamp all slots: 70 commands, same colour in slots 1-8, no Reset', () => {
+    const pixels: RGB[] = Array.from({length: 256}, () => [255, 0, 0] as RGB);
+    const commands = lampAllSlotsCommands(pixels);
+    expect(commands).toHaveLength(70);
+    expect(bytesToHex(commands[0])).toBe('bc0011f10355');
+    // enable(8): 02+F1+08 = FB; disable(8): 02+F2+08 = FC.
+    expect(bytesToHex(commands[1])).toBe('bc02f108fb55');
+    expect(bytesToHex(commands[67])).toBe('bc02f208fc55');
+    // 64 chunks: image 1-8, chunk 1-8 each, 102 bytes.
+    // All-red chunk, image 1 chunk 1: 02+01+01+32*255 = 1FE4 -> E4.
+    // Image 8 chunk 8: 02+08+08+32*255 = 1FF2 -> F2.
+    for (let image = 1; image <= 8; image++) {
+      for (let b = 0; b < 8; b++) {
+        const chunk = commands[2 + (image - 1) * 8 + b];
+        expect(chunk).toHaveLength(102);
+        expect(chunk[0]).toBe(0xbc);
+        expect(chunk[1]).toBe(0x02);
+        expect(chunk[2]).toBe(image);
+        expect(chunk[3]).toBe(b + 1);
+        expect(chunk[100]).toBe((0xe4 + (image - 1) + b) % 256);
+        expect(chunk[101]).toBe(0x55);
+      }
+    }
+    expect(bytesToHex(commands[66])).toBe('bc02073c4555');
+    expect(bytesToHex(commands[68])).toBe('bc0011f20455');
+    expect(bytesToHex(commands[69])).toBe('bc00121255');
+    const hex = commands.map(bytesToHex).join(' ');
+    expect(hex).not.toContain('bc00151555');
+    expect(() =>
+      lampAllSlotsCommands(Array.from({length: 255}, () => [0, 0, 0] as RGB)),
     ).toThrow();
   });
 });
