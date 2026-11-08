@@ -134,18 +134,19 @@ export function DrawScreen() {
         onDragEnd={() => setScrollEnabled(true)}
       />
       {/* Tool row (Nov 7, 2026, toolbar): Send / Share /
-          Draw / Erase / Clear as five equal tool buttons in
-          the shared ActionToolbar. Send and Share sit first,
-          in the same order as Photo's toolbar, and Send is
-          the same button Photo uses (same label, icon, and
-          busy behaviour); the old standalone "Send full
-          picture" button below is gone. Draw and Erase are
+          Add / Draw / Erase / Clear as six equal tool
+          buttons in the shared ActionToolbar. Send, Share,
+          and Add sit first, in the same order as Photo's
+          toolbar, and Add is the same tool button Photo
+          uses (tap adds to the active slideshow, long-press
+          opens the picker); the old full-width split Add
+          button below the fold is gone. Draw and Erase are
           a toggle (active = current tool); Clear blanks the
           grid immediately, no confirmation; Share opens the
-          share sheet for the current grid. Share feedback
-          goes to the status line at the top (via onResult),
-          since a toolbar row has no room for a note under
-          the button. */}
+          share sheet for the current grid. Share and Add
+          feedback goes to the status line at the top (via
+          onResult), since a toolbar row has no room for a
+          note under the button. */}
       <ActionToolbar>
         <ToolButton
           label="Send"
@@ -160,6 +161,13 @@ export function DrawScreen() {
           disabled={busy}
           variant="tool"
           onResult={setStatus}
+        />
+        <AddToSlideshowButton
+          label="Graffiti"
+          detail="Draw · 16×16 grid"
+          pixels={pixels}
+          onResult={setStatus}
+          variant="tool"
         />
         <ToolButton
           label="Draw"
@@ -183,7 +191,6 @@ export function DrawScreen() {
           accessibilityLabel="Clear grid"
         />
       </ActionToolbar>
-      <Text style={styles.label}>Color</Text>
       <ColorPad
         color={color}
         onColorChange={selectColor}
@@ -269,12 +276,6 @@ export function DrawScreen() {
           </View>
         </View>
       </Modal>
-      <AddToSlideshowButton
-        label="Graffiti"
-        detail="Draw · 16×16 grid"
-        pixels={pixels}
-        onResult={setStatus}
-      />
     </ScrollView>
     <BottomMenu />
     </View>
@@ -295,7 +296,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   editBannerText: {fontSize: 14, lineHeight: 20, color: '#234', marginBottom: 4},
-  label: {fontSize: 16, marginTop: 16, marginBottom: 8},
   padHint: {fontSize: 13, color: '#555', textAlign: 'center', marginBottom: 4},
   paletteStrip: {flexDirection: 'row', width: '100%', height: 36, marginVertical: 4},
   stripSegment: {flex: 1, borderWidth: 1, borderColor: '#999', marginHorizontal: 1},
