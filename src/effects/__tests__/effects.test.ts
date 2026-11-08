@@ -1,7 +1,10 @@
 import {
   EFFECTS,
   EFFECT_FRAME_COUNT,
+  MAX_PALETTE_COLORS,
   effectFrames,
+  nextEffectIndex,
+  prevEffectIndex,
   rotateGrid,
   speedFactor,
   type Grid,
@@ -139,14 +142,20 @@ describe('bands', () => {
 });
 
 describe('palette caps', () => {
-  test('effects 1 and 4 hold 6 colours, the others hold 7', () => {
-    expect(EFFECTS.find(e => e.id === 'rainbow')!.maxPaletteColors).toBe(6);
-    expect(EFFECTS.find(e => e.id === 'bands')!.maxPaletteColors).toBe(6);
-    for (const def of EFFECTS) {
-      if (def.id !== 'rainbow' && def.id !== 'bands') {
-        expect(def.maxPaletteColors).toBe(7);
-      }
-    }
+  test('the palette cap is 7 colours for every effect', () => {
+    expect(MAX_PALETTE_COLORS).toBe(7);
+  });
+});
+
+describe('swipe navigation', () => {
+  test('next wraps from the last effect to the first', () => {
+    expect(nextEffectIndex(0)).toBe(1);
+    expect(nextEffectIndex(6)).toBe(0);
+  });
+
+  test('previous wraps from the first effect to the last', () => {
+    expect(prevEffectIndex(0)).toBe(6);
+    expect(prevEffectIndex(3)).toBe(2);
   });
 });
 

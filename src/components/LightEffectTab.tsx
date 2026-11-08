@@ -1,5 +1,6 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
+  PanResponder,
   ScrollView,
   StyleSheet,
   Text,
@@ -15,7 +16,10 @@ import {useEffectState} from '../state/EffectState';
 import {
   EFFECTS,
   EFFECT_FRAME_COUNT,
+  MAX_PALETTE_COLORS,
   effectFrames,
+  nextEffectIndex,
+  prevEffectIndex,
   speedFactor,
 } from '../effects/effects';
 import type {RGB} from '../conversion/convert';
@@ -43,15 +47,21 @@ import type {RGB} from '../conversion/convert';
  * last one). A new preset brings its own default
  * palette.
  *
+ * The preview is a swipe target: swiping it left or
+ * right changes the effect, wrapping at the ends
+ * (past the last comes the first, before the first
+ * comes the last). Only clearly horizontal moves
+ * claim the touch, so vertical drags still scroll
+ * the page. The dots below do the same by tapping.
+ *
  * Save is explicit, not automatic: an effect save is
  * 70 writes at the proven pacing, about a second, and
  * the user will be scrubbing sliders. Nothing saves
  * while disconnected, and the button is disabled
  * while a save runs.
  *
- * Not in this pass: swiping the preview to change
- * presets (the dots do that), the heart favourites,
- * and auto-save on change.
+ * Not in this pass: the heart favourites, and
+ * auto-save on change.
  */
 export function LightEffectTab() {
   const {
@@ -115,6 +125,23 @@ export function LightEffectTab() {
 
   const preview = previewFrames[frameIndex] ?? previewFrames[0];
 
+  // Swipe the preview to change effect, wrapping at the
+  // ends. Created fresh each render so the release handler
+  // sees the current effect index. Only clearly horizontal
+  // moves claim the touch, so vertical drags still scroll
+  // the page.
+  const swipeResponder = PanResponder.create({
+    onMoveShouldSetPanResponder: (_evt, gs) =>
+      Math.abs(gs.dx) > Math.abs(gs.dy) && Math.abs(gs.dx) > 20,
+    onPanResponderRelease: (_evt, gs) => {
+      if (gs.dx < -50) {
+        setEffectIndex(nextEffectIndex(effectIndex));
+      } else if (gs.dx > 50) {
+        setEffectIndex(prevEffectIndex(effectIndex));
+      }
+    },
+  });
+
   function onHueChange(next: RGB) {
     // Editing the selected palette entry live: if the
     // current colour is a palette entry, that entry
@@ -132,7 +159,7 @@ export function LightEffectTab() {
   }
 
   function addColour() {
-    if (palette.length >= def.maxPaletteColors) {
+    if (palette.length >= MAX_PALETTE_COLORS) {
       return;
     }
     if (
@@ -201,7 +228,9 @@ export function LightEffectTab() {
       scrollEnabled={scrollEnabled}
     >
       <Text style={styles.status}>{status}</Text>
-      <PixelGrid pixels={preview} cellSize={20} />
+      <View {...swipeResponder.panHandlers}>
+        <PixelGrid pixels={preview} cellSize={20} />
+      </View>
       <View style={styles.dotsRow}>
         {EFFECTS.map((e, i) => (
           <TouchableOpacity
@@ -241,7 +270,7 @@ export function LightEffectTab() {
             ]}
           />
         ))}
-        {palette.length < def.maxPaletteColors ? (
+        {palette.length < MAX_PALETTE_COLORS ? (
           <TouchableOpacity
             accessibilityLabel="Add colour"
             onPress={addColour}
@@ -351,9 +380,11 @@ export function LightEffectTab() {
         </Text>
       </TouchableOpacity>
       <Text style={styles.note}>
-        Saves 8 frames. The panel cycles them at about a second each.
-        Rotation defaults to 90° — the stock app sends the grid
-        rotated, so the panel matches what the stock app shows.
+        Swipe the preview left or right to change effect — it wraps
+        around at the ends. Saves 8 frames. The panel cycles them at
+        about a second each. Rotation defaults to 90° — the stock app
+        sends the grid rotated, so the panel matches what the stock
+        app shows.
       </Text>
     </ScrollView>
   );

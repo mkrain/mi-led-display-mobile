@@ -64,6 +64,18 @@ export type Grid = RGB[]; // 256 entries, row-major
 
 export const EFFECT_FRAME_COUNT = 8;
 
+/**
+ * The palette cap for every effect (Nov 8, 2026,
+ * Jeremiah): 7 colours for all of them. The stock
+ * app shows 6 colours and no + button for effects 1
+ * and 4, which looks like a cap of 6 — but deleting
+ * a default colour there brings the + back and lets
+ * you add up to 7, so 6 is only the default size,
+ * not a real cap. We normalize at 7 rather than
+ * copying the stock app's inconsistency.
+ */
+export const MAX_PALETTE_COLORS = 7;
+
 export interface EffectParams {
   palette: RGB[];
   brightness: number; // 0-100
@@ -74,13 +86,6 @@ export interface EffectDef {
   id: string;
   name: string;
   defaultPalette: RGB[];
-  /**
-   * The palette cap (Nov 8, 2026, Jeremiah): effects 1
-   * and 4 hold 6 colours, the others hold 7. The stock
-   * app shows no + button at all for 1 and 4, and a +
-   * for the rest.
-   */
-  maxPaletteColors: number;
   /** False for the random effects: reversing their frame order is invisible. */
   hasDirection: boolean;
   /** The frame sequence, preview orientation, brightness applied. */
@@ -382,7 +387,6 @@ export const EFFECTS: EffectDef[] = [
     id: 'rainbow',
     name: 'Rainbow',
     defaultPalette: RAINBOW6,
-    maxPaletteColors: 6,
     hasDirection: true,
     frames: rainbowFrames,
   },
@@ -390,7 +394,6 @@ export const EFFECTS: EffectDef[] = [
     id: 'sparse-confetti',
     name: 'Confetti',
     defaultPalette: [RED, ORANGE, YELLOW, GREEN, BLUE],
-    maxPaletteColors: 7,
     hasDirection: false,
     frames: sparseConfettiFrames,
   },
@@ -398,7 +401,6 @@ export const EFFECTS: EffectDef[] = [
     id: 'speckles',
     name: 'Speckles',
     defaultPalette: [PURPLE, MAGENTA],
-    maxPaletteColors: 7,
     hasDirection: false,
     frames: specklesFrames,
   },
@@ -406,7 +408,6 @@ export const EFFECTS: EffectDef[] = [
     id: 'bands',
     name: 'Bands',
     defaultPalette: RAINBOW6,
-    maxPaletteColors: 6,
     hasDirection: true,
     frames: bandsFrames,
   },
@@ -414,7 +415,6 @@ export const EFFECTS: EffectDef[] = [
     id: 'diagonal',
     name: 'Diagonal',
     defaultPalette: [RED, WHITE],
-    maxPaletteColors: 7,
     hasDirection: true,
     frames: diagonalFrames,
   },
@@ -422,7 +422,6 @@ export const EFFECTS: EffectDef[] = [
     id: 'rainbow-diagonal',
     name: 'Rainbow diagonal',
     defaultPalette: [RED, ORANGE, YELLOW, GREEN, BLUE],
-    maxPaletteColors: 7,
     hasDirection: true,
     frames: rainbowDiagonalFrames,
   },
@@ -430,8 +429,21 @@ export const EFFECTS: EffectDef[] = [
     id: 'full-confetti',
     name: 'Full confetti',
     defaultPalette: [RED, ORANGE, YELLOW, GREEN, BLUE, MAGENTA],
-    maxPaletteColors: 7,
     hasDirection: false,
     frames: fullConfettiFrames,
   },
 ];
+
+/**
+ * Swipe navigation (Nov 8, 2026, Jeremiah): swiping
+ * the preview left or right changes the effect, and
+ * it wraps — past the last effect comes the first,
+ * and before the first comes the last.
+ */
+export function nextEffectIndex(index: number): number {
+  return (index + 1) % EFFECTS.length;
+}
+
+export function prevEffectIndex(index: number): number {
+  return (index - 1 + EFFECTS.length) % EFFECTS.length;
+}
