@@ -27,6 +27,7 @@ import {
   SERVICE_UUID,
   type PixelGrid,
   fullPictureCommands,
+  lampSlotSaveCommands,
   resetCommand,
   resetSavedPictureCommands,
   savedPictureCommands,
@@ -525,6 +526,36 @@ export async function saveStaticPictureToDevice(
 ): Promise<void> {
   await savePictureToDevice(pixels);
   await writeCommand(slideshowCommand());
+  await sleep(2);
+}
+
+/**
+ * Lamp slot save (Nov 8, 2026): writes one solid colour as
+ * image index 1 of a 1-image set, via the 0x02 indexed-write
+ * family (lampSlotSaveCommands in protocol.ts). Hypothesis
+ * test, not a proven path: the plain save appends, so a lamp
+ * colour must overwrite a slot to stay a single static
+ * image. No Reset, so the link never drops. Timings follow
+ * SpawnDev: 50 ms after the 0x11 bracket commands, 5 ms
+ * between the 0x02 writes.
+ */
+export async function saveLampColor(pixels: PixelGrid): Promise<void> {
+  const commands = lampSlotSaveCommands(pixels);
+  await writeCommand(commands[0]); // 0x11 enable
+  await sleep(50);
+  await writeCommand(commands[1]); // 0x02 enable(1)
+  await sleep(5);
+  for (const chunk of commands.slice(2, -4)) {
+    await writeCommand(chunk);
+    await sleep(5);
+  }
+  await writeCommand(commands[commands.length - 4]); // marker
+  await sleep(5);
+  await writeCommand(commands[commands.length - 3]); // 0x02 disable(1)
+  await sleep(5);
+  await writeCommand(commands[commands.length - 2]); // 0x11 disable
+  await sleep(50);
+  await writeCommand(commands[commands.length - 1]); // slideshow mode
   await sleep(2);
 }
 

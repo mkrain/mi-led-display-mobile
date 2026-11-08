@@ -4,7 +4,7 @@ import Slider from '@react-native-community/slider';
 import {PixelGrid, rgbToCss} from '../components/PixelGrid';
 import {ColorPad} from '../components/ColorPad';
 import {BottomMenu} from '../components/BottomMenu';
-import {saveStaticPictureToDevice} from '../ble/device';
+import {saveLampColor} from '../ble/device';
 import {useConnectionState} from '../state/ConnectionState';
 import {useLampState} from '../state/LampState';
 import {LAMP_PRESETS, LAMP_PRESET_NAMES, lampGrid} from '../lamp/lamp';
@@ -16,18 +16,18 @@ import {LAMP_PRESETS, LAMP_PRESET_NAMES, lampGrid} from '../lamp/lamp';
  * Stock behaviour, from the stock tab's screenshots:
  * a colour wheel, six presets, a brightness slider, and
  * a selection is automatically saved to the panel as a
- * static display. The save is the stock app's own fast
- * save (Nov 8, 2026): open, init, 8 stored blocks, end,
- * close, then slideshow mode — read from offe's snoop
- * of a stock save, which has no Reset in it. The first
- * version of this tab used the Replace sequence instead
- * (Reset, reconnect, save), and a lamp colour took ~30s
- * to apply where the stock app applies it in about a
- * second, because Reset drops the link and forces a
- * ~20s reconnect scan. The fast save appends to the
- * saved set instead of wiping it, so repeated lamp
- * changes accumulate images unless the panel overwrites
- * the slot — the device test settles that.
+ * static display. The save is a slot write (Nov 8, 2026):
+ * the plain save appends — the device test proved each
+ * lamp colour becomes another slideshow image — so a
+ * lamp colour must overwrite a slot to stay a single
+ * static image. The only slot-write source is SpawnDev's
+ * 0x02 indexed-write family: image index 1 of a
+ * 1-image set, bracketed by the 0x11 static-write
+ * enable/disable, no Reset, so the link never drops
+ * and a colour applies in about a second. This is a
+ * hypothesis test, not a proven path: if the panel
+ * still cycles or ignores it, the next step is a
+ * PacketLogger capture of the stock app's Mode tab.
  *
  * Auto-save is debounced, not per move event: dragging
  * the colour pad fires dozens of changes, and each save
@@ -74,9 +74,7 @@ export function LampScreen() {
     savingRef.current = true;
     setStatus('Saving lamp colour…');
     try {
-      await saveStaticPictureToDevice(
-        lampGrid(colorRef.current, brightnessRef.current),
-      );
+      await saveLampColor(lampGrid(colorRef.current, brightnessRef.current));
       setStatus('Lamp saved — the panel shows this colour.');
     } catch (e) {
       setStatus(
@@ -123,7 +121,7 @@ export function LampScreen() {
         <Text style={styles.status}>{status}</Text>
         <PixelGrid pixels={preview} cellSize={20} />
         <Text style={styles.note}>
-          Saves to the panel as a single image — no disconnect, about a
+          Saves as a single image in slot 1 — no disconnect, about a
           second.
         </Text>
         <ColorPad

@@ -293,3 +293,111 @@ export function resetCommand(): number[] {
 export function resetSavedPictureCommands(pixels: PixelGrid): number[][] {
   return [resetCommand(), ...savedPictureCommands(pixels)];
 }
+
+// ---------------------------------------------------------------------------
+// Slideshow-indexed write (0x02 family, SpawnDev only) — UNPROVEN.
+// ---------------------------------------------------------------------------
+// The plain save appends: the Nov 8, 2026 Lamp device test
+// proved each lamp colour becomes another slideshow image,
+// so the panel cycles all of them. The stock Lamplight tab
+// does not do that — one static colour, applied in about a
+// second, no disconnect — so it writes a slot, not an append.
+// SpawnDev's library is the only source for a slot write:
+//   BC 02 F1 <count> CRC 55   (slideshow image write enable)
+//   BC 02 <index> <chunk 1-8> + 96 RGB bytes + CRC 55
+//   BC 02 07 3C CRC 55         (marker, sent when index == count)
+//   BC 02 F2 <count> CRC 55   (slideshow image write disable)
+// and their save flow brackets the 0x02 writes with the 0x11
+// static-write enable/disable, after a Reset. The Lamp slot
+// test keeps the brackets, drops the Reset (Reset is what
+// drops the link and forces the reconnect scan), and writes
+// index 1 of a 1-image set: if count declares the set size,
+// each new colour replaces the set instead of appending.
+// Checksum rule here is SpawnDev's plain truncated sum of
+// the bytes after BC — the same rule as the proven stored
+// blocks. Note the stock 0x11 open/close use sum+1, not
+// plain sum, so if the panel ignores this sequence, the
+// first variation is sum+1 on the short 0x02 commands.
+// Chunk checksum: sum of 0x02 + index + chunk + 96 pixel
+// bytes, mod 256 (plain sum, like stored blocks).
+// Timings follow SpawnDev: 5 ms between 0x02 writes, 50 ms
+// after the 0x11 bracket commands.
+
+/** Slideshow image write enable: BC 02 F1 <count> CRC 55. */
+export function slideShowImageWriteEnableCommand(count: number): number[] {
+  const c = clampByte(count, 'count');
+  return [0xbc, 0x02, 0xf1, c, (0x02 + 0xf1 + c) % 256, 0x55];
+}
+
+/** Slideshow image write disable: BC 02 F2 <count> CRC 55. */
+export function slideShowImageWriteDisableCommand(count: number): number[] {
+  const c = clampByte(count, 'count');
+  return [0xbc, 0x02, 0xf2, c, (0x02 + 0xf2 + c) % 256, 0x55];
+}
+
+/** Slideshow marker: BC 02 07 3C 45 55. */
+export function slideShowMarkerCommand(): number[] {
+  return [0xbc, 0x02, 0x07, 0x3c, 0x45, 0x55];
+}
+
+/**
+ * One slideshow-image chunk (102 bytes): BC 02 <index> <chunk 1-8>
+ * + 96 RGB bytes + checksum + 55. Each chunk covers 32 pixels =
+ * 2 rows, same split as the live and stored blocks.
+ */
+export function slideShowImageWriteChunkCommand(
+  imageIndex: number,
+  chunkIndex: number,
+  blockPixels: readonly RGB[],
+): number[] {
+  if (!Number.isInteger(chunkIndex) || chunkIndex < 1 || chunkIndex > 8) {
+    throw new Error(`chunkIndex must be 1-8, got ${chunkIndex}`);
+  }
+  if (blockPixels.length !== BLOCK_PIXEL_COUNT) {
+    throw new Error(
+      `blockPixels must contain exactly 32 pixels, got ${blockPixels.length}`,
+    );
+  }
+  const index = clampByte(imageIndex, 'imageIndex');
+  const out: number[] = [0xbc, 0x02, index, chunkIndex];
+  let sum = 0x02 + index + chunkIndex;
+  for (const [r, g, b] of blockPixels) {
+    out.push(clampByte(r, 'r'), clampByte(g, 'g'), clampByte(b, 'b'));
+    sum += clampByte(r, 'r') + clampByte(g, 'g') + clampByte(b, 'b');
+  }
+  out.push(sum % 256, 0x55);
+  return out;
+}
+
+/**
+ * The Lamp slot-save sequence (14 commands): 0x11 enable,
+ * 0x02 enable(1), 8 chunks of image index 1, marker,
+ * 0x02 disable(1), 0x11 disable, slideshow mode. No Reset.
+ */
+export function lampSlotSaveCommands(pixels: PixelGrid): number[][] {
+  if (pixels.length !== PIXEL_COUNT) {
+    throw new Error(
+      `pixels must contain exactly 256 RGB tuples, got ${pixels.length}`,
+    );
+  }
+  const commands: number[][] = [
+    saveOpenCommand(),
+    slideShowImageWriteEnableCommand(1),
+  ];
+  for (let block = 0; block < BLOCK_COUNT; block++) {
+    commands.push(
+      slideShowImageWriteChunkCommand(
+        1,
+        block + 1,
+        pixels.slice(block * 32, block * 32 + 32),
+      ),
+    );
+  }
+  commands.push(
+    slideShowMarkerCommand(),
+    slideShowImageWriteDisableCommand(1),
+    saveCloseCommand(),
+    slideshowCommand(),
+  );
+  return commands;
+}

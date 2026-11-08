@@ -3,12 +3,17 @@ import {
   fullPictureBlockCommand,
   fullPictureCommands,
   graffitiInitCommands,
+  lampSlotSaveCommands,
   powerOffCommand,
   powerOnCommand,
   singlePixelCommand,
   resetCommand,
   resetSavedPictureCommands,
   savedPictureCommands,
+  slideShowImageWriteChunkCommand,
+  slideShowImageWriteDisableCommand,
+  slideShowImageWriteEnableCommand,
+  slideShowMarkerCommand,
   slideshowCommand,
   storedPictureBlockCommand,
   storedPictureChecksum,
@@ -139,5 +144,55 @@ describe('protocol bytes', () => {
     // nothing else — no open/init/blocks/close — so a later Save
     // can be judged on its own, without a burst save muddying it.
     expect(bytesToHex(resetCommand())).toBe('bc00151555');
+  });
+
+  test('lamp slot save: 14 commands, index 1 of a 1-image set, no Reset', () => {
+    const pixels: RGB[] = Array.from({length: 256}, () => [255, 0, 0] as RGB);
+    const commands = lampSlotSaveCommands(pixels);
+    expect(commands).toHaveLength(14);
+    // 0x11 brackets are the proven stock-snoop bytes.
+    expect(bytesToHex(commands[0])).toBe('bc0011f10355');
+    expect(bytesToHex(commands[12])).toBe('bc0011f20455');
+    // 0x02 short commands use SpawnDev's plain truncated sum:
+    // enable(1): 02+F1+01 = F4; disable(1): 02+F2+01 = F5.
+    expect(bytesToHex(slideShowImageWriteEnableCommand(1))).toBe(
+      'bc02f101f455',
+    );
+    expect(bytesToHex(slideShowImageWriteDisableCommand(1))).toBe(
+      'bc02f201f555',
+    );
+    expect(bytesToHex(commands[1])).toBe('bc02f101f455');
+    expect(bytesToHex(commands[11])).toBe('bc02f201f555');
+    // Marker: 02+07+3C = 45.
+    expect(bytesToHex(slideShowMarkerCommand())).toBe('bc02073c4555');
+    expect(bytesToHex(commands[10])).toBe('bc02073c4555');
+    // 8 chunks, 102 bytes each: BC 02 01 <chunk> + 96 bytes +
+    // checksum + 55. All-red chunk 1: 02+01+01+32*255 = 1FE4 -> E4.
+    // The checksum includes the chunk number, so each chunk is
+    // one more than the last.
+    for (let b = 0; b < 8; b++) {
+      const chunk = commands[2 + b];
+      expect(chunk).toHaveLength(102);
+      expect(chunk[0]).toBe(0xbc);
+      expect(chunk[1]).toBe(0x02);
+      expect(chunk[2]).toBe(1);
+      expect(chunk[3]).toBe(b + 1);
+      expect(chunk[100]).toBe(0xe4 + b);
+      expect(chunk[101]).toBe(0x55);
+    }
+    expect(commands[2].slice(4, 7)).toEqual([255, 0, 0]);
+    expect(bytesToHex(commands[13])).toBe('bc00121255');
+    const hex = commands.map(bytesToHex).join(' ');
+    expect(hex).not.toContain('bc00151555');
+    expect(() =>
+      lampSlotSaveCommands(Array.from({length: 255}, () => [0, 0, 0] as RGB)),
+    ).toThrow();
+    expect(() =>
+      slideShowImageWriteChunkCommand(
+        1,
+        9,
+        Array.from({length: 32}, () => [0, 0, 0] as RGB),
+      ),
+    ).toThrow();
   });
 });
