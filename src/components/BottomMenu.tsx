@@ -7,7 +7,7 @@ import type {RootStackParamList} from '../../App';
 
 /**
  * Persistent bottom menu, like a desktop taskbar: Connect / Draw /
- * Photo on every screen, so navigation never depends on finding a
+ * Photo / Slideshow / Lamp on every screen, so navigation never depends on finding a
  * "Go to …" button in the middle of a screen. The active tab is
  * highlighted; tapping the active tab does nothing (no re-push).
  * Glyphs are text symbols, not emoji.
@@ -37,6 +37,7 @@ const TABS: Array<{name: keyof RootStackParamList; label: string; glyph: string}
   {name: 'Draw', label: 'Draw', glyph: '✎'},
   {name: 'Photo', label: 'Photo', glyph: '▣'},
   {name: 'Slideshow', label: 'Slideshow', glyph: '▦'},
+  {name: 'Lamp', label: 'Lamp', glyph: '☀'},
 ];
 
 export function BottomMenu() {

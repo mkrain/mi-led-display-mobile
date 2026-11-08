@@ -1,7 +1,8 @@
 /**
  * MI LED Display — bare React Native app (no Expo).
- * One simple stack: Connect -> Draw / Photo, with a persistent
- * BottomMenu (Connect / Draw / Photo) on every screen.
+ * One simple stack: Connect -> Draw / Photo / Slideshow / Lamp,
+ * with a persistent BottomMenu (Connect / Draw / Photo /
+ * Slideshow / Lamp) on every screen.
  * @format
  */
 
@@ -12,18 +13,21 @@ import {SafeAreaProvider} from 'react-native-safe-area-context';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {ConnectScreen} from './src/screens/ConnectScreen';
 import {DrawScreen} from './src/screens/DrawScreen';
+import {LampScreen} from './src/screens/LampScreen';
 import {PhotoScreen} from './src/screens/PhotoScreen';
 import {SlideshowScreen} from './src/screens/SlideshowScreen';
 import {PhotoStateProvider} from './src/state/PhotoState';
 import {ConnectionStateProvider} from './src/state/ConnectionState';
 import {SlideshowStateProvider} from './src/state/SlideshowState';
 import {DrawStateProvider} from './src/state/DrawState';
+import {LampStateProvider} from './src/state/LampState';
 
 export type RootStackParamList = {
   Connect: undefined;
   Draw: undefined;
   Photo: undefined;
   Slideshow: undefined;
+  Lamp: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -35,6 +39,7 @@ function App() {
     <ConnectionStateProvider>
     <SlideshowStateProvider>
     <DrawStateProvider>
+    <LampStateProvider>
     <NavigationContainer>
       <StatusBar barStyle="dark-content" />
       <Stack.Navigator initialRouteName="Connect">
@@ -60,8 +65,14 @@ function App() {
           component={SlideshowScreen}
           options={{gestureEnabled: false}}
         />
+        <Stack.Screen
+          name="Lamp"
+          component={LampScreen}
+          options={{gestureEnabled: false}}
+        />
       </Stack.Navigator>
     </NavigationContainer>
+    </LampStateProvider>
     </DrawStateProvider>
     </SlideshowStateProvider>
     </ConnectionStateProvider>
