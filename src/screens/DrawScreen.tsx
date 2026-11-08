@@ -133,16 +133,34 @@ export function DrawScreen() {
         onDragStart={() => setScrollEnabled(false)}
         onDragEnd={() => setScrollEnabled(true)}
       />
-      {/* Tool row (Nov 7, 2026, toolbar): Draw / Erase /
-          Clear / Share as four equal tool buttons in the
-          shared ActionToolbar, same row Photo uses. Draw
-          and Erase are a toggle (active = current tool);
-          Clear blanks the grid immediately, no confirmation;
-          Share opens the share sheet for the current grid.
-          Share feedback goes to the status line at the top
-          (via onResult), since a toolbar row has no room
-          for a note under the button. */}
+      {/* Tool row (Nov 7, 2026, toolbar): Send / Share /
+          Draw / Erase / Clear as five equal tool buttons in
+          the shared ActionToolbar. Send and Share sit first,
+          in the same order as Photo's toolbar, and Send is
+          the same button Photo uses (same label, icon, and
+          busy behaviour); the old standalone "Send full
+          picture" button below is gone. Draw and Erase are
+          a toggle (active = current tool); Clear blanks the
+          grid immediately, no confirmation; Share opens the
+          share sheet for the current grid. Share feedback
+          goes to the status line at the top (via onResult),
+          since a toolbar row has no room for a note under
+          the button. */}
       <ActionToolbar>
+        <ToolButton
+          label="Send"
+          icon="📲"
+          onPress={send}
+          disabled={busy}
+          accessibilityLabel="Send to display"
+        />
+        <ShareImageButton
+          label={editingItem ? editingItem.label : 'Graffiti'}
+          pixels={pixels}
+          disabled={busy}
+          variant="tool"
+          onResult={setStatus}
+        />
         <ToolButton
           label="Draw"
           icon="✏️"
@@ -163,13 +181,6 @@ export function DrawScreen() {
           onPress={() => setPixels(blankGrid())}
           disabled={busy}
           accessibilityLabel="Clear grid"
-        />
-        <ShareImageButton
-          label={editingItem ? editingItem.label : 'Graffiti'}
-          pixels={pixels}
-          disabled={busy}
-          variant="tool"
-          onResult={setStatus}
         />
       </ActionToolbar>
       <Text style={styles.label}>Color</Text>
@@ -258,9 +269,6 @@ export function DrawScreen() {
           </View>
         </View>
       </Modal>
-      <View style={styles.button}>
-        <Button title={busy ? 'Sending…' : 'Send full picture'} onPress={send} disabled={busy} />
-      </View>
       <AddToSlideshowButton
         label="Graffiti"
         detail="Draw · 16×16 grid"
