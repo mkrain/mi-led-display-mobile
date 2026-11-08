@@ -1,11 +1,13 @@
 import BleManager from 'react-native-ble-manager';
 import {clearConnection, setConnection} from '../ble/connection';
 import {
+  saveEffectToDevice,
   saveLampColor,
   saveLampColorAllSlots,
   saveStaticPictureToDevice,
 } from '../ble/device';
 import {solidGrid} from '../lamp/lamp';
+import {EFFECTS, effectFrames} from '../effects/effects';
 
 const writes = BleManager.writeWithoutResponse as jest.Mock;
 
@@ -122,6 +124,57 @@ describe('saveLampColorAllSlots', () => {
     expect(sent[67]).toEqual([0xbc, 0x02, 0xf2, 0x08, 0xfc, 0x55]);
     expect(sent[68]).toEqual([0xbc, 0x00, 0x11, 0xf2, 0x04, 0x55]);
     expect(sent[69]).toEqual([0xbc, 0x00, 0x12, 0x12, 0x55]);
+    const hex = sent
+      .map(bytes => bytes.map(b => b.toString(16).padStart(2, '0')).join(''))
+      .join(' ');
+    expect(hex).not.toContain('bc00151555');
+    expect(sent.some(bytes => bytes[1] === 0x0f)).toBe(false);
+  });
+});
+
+describe('saveEffectToDevice', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    clearConnection();
+    setConnection({id: 'abc', name: 'MI Matrix Display', mtu: 512});
+  });
+
+  afterEach(() => {
+    clearConnection();
+  });
+
+  test('8 distinct frames: 70 writes, count 8, indices 1-8, no Reset, no 0x0F', async () => {
+    const def = EFFECTS[0];
+    const frames = effectFrames(
+      def,
+      {palette: def.defaultPalette, brightness: 100, speed: 50},
+      8,
+      1,
+      false,
+    );
+    await saveEffectToDevice(frames);
+    const sent: number[][] = writes.mock.calls.map(call => call[3] as number[]);
+    expect(sent).toHaveLength(70);
+    expect(sent[0]).toEqual([0xbc, 0x00, 0x11, 0xf1, 0x03, 0x55]);
+    expect(sent[1]).toEqual([0xbc, 0x02, 0xf1, 0x08, 0xfb, 0x55]);
+    for (let image = 1; image <= 8; image++) {
+      for (let b = 0; b < 8; b++) {
+        const chunk = sent[2 + (image - 1) * 8 + b];
+        expect(chunk[0]).toBe(0xbc);
+        expect(chunk[1]).toBe(0x02);
+        expect(chunk[2]).toBe(image);
+        expect(chunk[3]).toBe(b + 1);
+        expect(chunk).toHaveLength(102);
+        expect(chunk[101]).toBe(0x55);
+      }
+    }
+    expect(sent[66]).toEqual([0xbc, 0x02, 0x07, 0x3c, 0x45, 0x55]);
+    expect(sent[67]).toEqual([0xbc, 0x02, 0xf2, 0x08, 0xfc, 0x55]);
+    expect(sent[68]).toEqual([0xbc, 0x00, 0x11, 0xf2, 0x04, 0x55]);
+    expect(sent[69]).toEqual([0xbc, 0x00, 0x12, 0x12, 0x55]);
+    // The frames differ, so image 1's first chunk differs
+    // from image 2's: this is an animation, not 8 copies.
+    expect(sent[2]).not.toEqual(sent[10]);
     const hex = sent
       .map(bytes => bytes.map(b => b.toString(16).padStart(2, '0')).join(''))
       .join(' ');

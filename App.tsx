@@ -21,6 +21,7 @@ import {ConnectionStateProvider} from './src/state/ConnectionState';
 import {SlideshowStateProvider} from './src/state/SlideshowState';
 import {DrawStateProvider} from './src/state/DrawState';
 import {LampStateProvider} from './src/state/LampState';
+import {EffectStateProvider} from './src/state/EffectState';
 
 export type RootStackParamList = {
   Connect: undefined;
@@ -40,6 +41,7 @@ function App() {
     <SlideshowStateProvider>
     <DrawStateProvider>
     <LampStateProvider>
+    <EffectStateProvider>
     <NavigationContainer>
       <StatusBar barStyle="dark-content" />
       <Stack.Navigator initialRouteName="Connect">
@@ -72,6 +74,7 @@ function App() {
         />
       </Stack.Navigator>
     </NavigationContainer>
+    </EffectStateProvider>
     </LampStateProvider>
     </DrawStateProvider>
     </SlideshowStateProvider>

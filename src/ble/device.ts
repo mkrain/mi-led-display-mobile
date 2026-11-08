@@ -26,6 +26,7 @@ import {
   DEVICE_NAME,
   SERVICE_UUID,
   type PixelGrid,
+  effectSaveCommands,
   fullPictureCommands,
   lampAllSlotsCommands,
   lampSlotSaveCommands,
@@ -555,6 +556,20 @@ export async function saveLampColorAllSlots(
   pixels: PixelGrid,
 ): Promise<void> {
   await saveLampCommands(lampAllSlotsCommands(pixels));
+}
+
+/**
+ * Light effect save (Nov 8, 2026): 8 different frames,
+ * one per slot, same 70-command shape and same proven
+ * pacing as the lamp all-slots save. The panel cycles
+ * the 8 frames at about 1s each, so this is the stored
+ * animation the stock app's Light effect plays with
+ * the app closed. No Reset, so the link never drops.
+ */
+export async function saveEffectToDevice(
+  frames: readonly PixelGrid[],
+): Promise<void> {
+  await saveLampCommands(effectSaveCommands(frames));
 }
 
 /**

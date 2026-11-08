@@ -445,3 +445,53 @@ export function lampAllSlotsCommands(pixels: PixelGrid): number[][] {
   );
   return commands;
 }
+
+/**
+ * The Light effect save sequence (70 commands): the same
+ * shape as the lamp all-slots save — 0x11 enable, 0x02
+ * enable(8), 8 images of 8 chunks, marker, 0x02
+ * disable(8), 0x11 disable, slideshow mode — but each
+ * slot holds a different frame, so the panel cycles
+ * them as an animation. The panel cycles at about 1s
+ * per frame (effect 1's loop measured 8s for 8 frames
+ * on device video, Nov 8, 2026), so 8 frames is one
+ * loop. No Reset: the lamp all-slots save proved the
+ * full 8-image transfer defines the set.
+ */
+export function effectSaveCommands(frames: readonly PixelGrid[]): number[][] {
+  if (frames.length !== 8) {
+    throw new Error(
+      `frames must contain exactly 8 grids, got ${frames.length}`,
+    );
+  }
+  for (const pixels of frames) {
+    if (pixels.length !== PIXEL_COUNT) {
+      throw new Error(
+        `each frame must contain exactly 256 RGB tuples, got ${pixels.length}`,
+      );
+    }
+  }
+  const commands: number[][] = [
+    saveOpenCommand(),
+    slideShowImageWriteEnableCommand(8),
+  ];
+  for (let image = 1; image <= 8; image++) {
+    const pixels = frames[image - 1];
+    for (let block = 0; block < BLOCK_COUNT; block++) {
+      commands.push(
+        slideShowImageWriteChunkCommand(
+          image,
+          block + 1,
+          pixels.slice(block * 32, block * 32 + 32),
+        ),
+      );
+    }
+  }
+  commands.push(
+    slideShowMarkerCommand(),
+    slideShowImageWriteDisableCommand(8),
+    saveCloseCommand(),
+    slideshowCommand(),
+  );
+  return commands;
+}
