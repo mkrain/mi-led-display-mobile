@@ -292,21 +292,25 @@ export function LightEffectTab() {
           ))}
         </View>
         <View style={styles.paletteButtons}>
-          {palette.length < MAX_PALETTE_COLORS ? (
-            <TouchableOpacity
-              accessibilityLabel="Add colour"
-              onPress={addColour}
-              style={styles.paletteButton}
-            >
-              <Text style={styles.paletteButtonLabel}>+</Text>
-            </TouchableOpacity>
-          ) : null}
+          <TouchableOpacity
+            accessibilityLabel="Add colour"
+            onPress={addColour}
+            disabled={palette.length >= MAX_PALETTE_COLORS}
+            style={[
+              styles.paletteButton,
+              palette.length >= MAX_PALETTE_COLORS
+                ? styles.paletteButtonDisabled
+                : undefined,
+            ]}
+          >
+            <Text style={styles.paletteButtonLabel}>+</Text>
+          </TouchableOpacity>
           <TouchableOpacity
             accessibilityLabel="Remove colour"
             onPress={removeColour}
             style={styles.paletteButton}
           >
-            <Text style={styles.paletteButtonLabel}>×</Text>
+            <Text style={styles.paletteButtonLabel}>🗑️</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -466,6 +470,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // At the cap the + stays put but greys out, so the
+  // trash never shifts when the last colour is added.
+  paletteButtonDisabled: {opacity: 0.4},
   paletteButtonLabel: {fontSize: 20, color: '#fff'},
   rgbText: {fontSize: 16, marginTop: 12},
   sliderRow: {
