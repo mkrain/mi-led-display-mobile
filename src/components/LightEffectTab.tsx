@@ -132,6 +132,9 @@ export function LightEffectTab() {
   }
 
   function addColour() {
+    if (palette.length >= def.maxPaletteColors) {
+      return;
+    }
     if (
       palette.some(
         c => c[0] === color[0] && c[1] === color[1] && c[2] === color[2],
@@ -238,13 +241,15 @@ export function LightEffectTab() {
             ]}
           />
         ))}
-        <TouchableOpacity
-          accessibilityLabel="Add colour"
-          onPress={addColour}
-          style={styles.paletteButton}
-        >
-          <Text style={styles.paletteButtonLabel}>+</Text>
-        </TouchableOpacity>
+        {palette.length < def.maxPaletteColors ? (
+          <TouchableOpacity
+            accessibilityLabel="Add colour"
+            onPress={addColour}
+            style={styles.paletteButton}
+          >
+            <Text style={styles.paletteButtonLabel}>+</Text>
+          </TouchableOpacity>
+        ) : null}
         <TouchableOpacity
           accessibilityLabel="Remove colour"
           onPress={removeColour}

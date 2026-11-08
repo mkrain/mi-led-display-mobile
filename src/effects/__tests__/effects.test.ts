@@ -79,13 +79,17 @@ describe('rainbow', () => {
     const {def, params} = paramsFor('rainbow');
     const frames = def.frames(params, 3);
     const pal = def.defaultPalette;
+    // The cycle is the 6 palette colours plus a fixed
+    // white step, which is part of the effect, not the
+    // palette.
+    const cycle = [...pal, [255, 255, 255] as [number, number, number]];
     for (let c = 0; c < 16; c++) {
-      expect(frames[0][c]).toEqual(pal[c % pal.length]);
+      expect(frames[0][c]).toEqual(cycle[c % cycle.length]);
       expect(frames[1][c]).toEqual(
-        pal[((c - 2) % pal.length + pal.length) % pal.length],
+        cycle[((c - 2) % cycle.length + cycle.length) % cycle.length],
       );
       expect(frames[2][c]).toEqual(
-        pal[((c - 4) % pal.length + pal.length) % pal.length],
+        cycle[((c - 4) % cycle.length + cycle.length) % cycle.length],
       );
     }
     // Rows are uniform within a frame.
@@ -96,7 +100,8 @@ describe('rainbow', () => {
     const {def, params} = paramsFor('rainbow', {speed: 100});
     const frames = def.frames(params, 2);
     const pal = def.defaultPalette;
-    expect(frames[1][0]).toEqual(pal[3]);
+    const cycle = [...pal, [255, 255, 255] as [number, number, number]];
+    expect(frames[1][0]).toEqual(cycle[3]);
   });
 });
 
@@ -115,6 +120,33 @@ describe('bands', () => {
     // row 8 shows band 3.
     expect(frames[1][0]).toEqual(pal[1]);
     expect(frames[1][8 * 16]).toEqual(pal[3]);
+  });
+
+  test('bands use only the first four palette colours', () => {
+    const {def, params} = paramsFor('bands');
+    expect(params.palette).toHaveLength(6);
+    const frames = def.frames(params, 8);
+    const used = new Set<string>();
+    for (const frame of frames) {
+      for (const c of frame) {
+        used.add(c.join(','));
+      }
+    }
+    expect([...used].sort()).toEqual(
+      params.palette.slice(0, 4).map(c => c.join(',')).sort(),
+    );
+  });
+});
+
+describe('palette caps', () => {
+  test('effects 1 and 4 hold 6 colours, the others hold 7', () => {
+    expect(EFFECTS.find(e => e.id === 'rainbow')!.maxPaletteColors).toBe(6);
+    expect(EFFECTS.find(e => e.id === 'bands')!.maxPaletteColors).toBe(6);
+    for (const def of EFFECTS) {
+      if (def.id !== 'rainbow' && def.id !== 'bands') {
+        expect(def.maxPaletteColors).toBe(7);
+      }
+    }
   });
 });
 

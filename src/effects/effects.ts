@@ -74,6 +74,13 @@ export interface EffectDef {
   id: string;
   name: string;
   defaultPalette: RGB[];
+  /**
+   * The palette cap (Nov 8, 2026, Jeremiah): effects 1
+   * and 4 hold 6 colours, the others hold 7. The stock
+   * app shows no + button at all for 1 and 4, and a +
+   * for the rest.
+   */
+  maxPaletteColors: number;
   /** False for the random effects: reversing their frame order is invisible. */
   hasDirection: boolean;
   /** The frame sequence, preview orientation, brightness applied. */
@@ -165,7 +172,7 @@ const MAGENTA: RGB = [255, 0, 255];
 const WHITE: RGB = [255, 255, 255];
 const PURPLE: RGB = [154, 110, 255];
 
-const RAINBOW7: RGB[] = [RED, ORANGE, YELLOW, GREEN, BLUE, MAGENTA, WHITE];
+const RAINBOW6: RGB[] = [RED, ORANGE, YELLOW, GREEN, BLUE, MAGENTA];
 
 /**
  * 1 Rainbow: vertical hue bands (preview orientation),
@@ -174,9 +181,18 @@ const RAINBOW7: RGB[] = [RED, ORANGE, YELLOW, GREEN, BLUE, MAGENTA, WHITE];
  * shows horizontal bands scrolling down at 2 rows/sec
  * — a colour travels row 1 to row 16, the rest of the
  * cycle following like a train (Jeremiah, Nov 8, 2026).
+ *
+ * The cycle is the 6 palette colours plus a fixed
+ * white step: the stock palette holds 6 colours and
+ * shows no + button, but the rendered pattern has a
+ * seventh, white band — it is in the panel video and
+ * the stock preview fades to pale at its right edge —
+ * so white is part of the effect, not a palette colour
+ * the user edits.
  */
 function rainbowFrames(params: EffectParams, count: number): Grid[] {
   const step = 2 * speedFactor(params.speed);
+  const cycle = [...params.palette, WHITE];
   const out: Grid[] = [];
   for (let f = 0; f < count; f++) {
     const offset = Math.floor(f * step);
@@ -184,9 +200,8 @@ function rainbowFrames(params: EffectParams, count: number): Grid[] {
     for (let r = 0; r < 16; r++) {
       for (let c = 0; c < 16; c++) {
         const idx =
-          ((c - offset) % params.palette.length + params.palette.length) %
-          params.palette.length;
-        grid[r * 16 + c] = [...(params.palette[idx] ?? RED)] as RGB;
+          ((c - offset) % cycle.length + cycle.length) % cycle.length;
+        grid[r * 16 + c] = [...(cycle[idx] ?? RED)] as RGB;
       }
     }
     out.push(withBrightness(grid, params.brightness));
@@ -264,18 +279,26 @@ function specklesFrames(params: EffectParams, count: number): Grid[] {
  * orientation), scrolling up at 4.5 rows per frame
  * at 50%. After the default rotation the panel shows
  * vertical bands scrolling right at ~4.5 cols/sec.
+ *
+ * The bands use only the first four palette colours:
+ * the stock palette holds the same 6 as rainbow, but
+ * the pattern shows four bands — red, orange, yellow,
+ * green — so blue and magenta sit in the palette
+ * without ever appearing in the pattern.
  */
 function bandsFrames(params: EffectParams, count: number): Grid[] {
   const step = 4.5 * speedFactor(params.speed);
+  const bandColors = params.palette.slice(0, 4);
   const out: Grid[] = [];
   for (let f = 0; f < count; f++) {
     const offset = f * step;
     const grid = blank();
     for (let r = 0; r < 16; r++) {
-      const band = Math.floor((r + offset) / 4) % params.palette.length;
+      const band = Math.floor((r + offset) / 4) % bandColors.length;
       const colour =
-        params.palette[((band % params.palette.length) + params.palette.length) % params.palette.length] ??
-        RED;
+        bandColors[
+          ((band % bandColors.length) + bandColors.length) % bandColors.length
+        ] ?? RED;
       for (let c = 0; c < 16; c++) {
         grid[r * 16 + c] = [...colour] as RGB;
       }
@@ -358,7 +381,8 @@ export const EFFECTS: EffectDef[] = [
   {
     id: 'rainbow',
     name: 'Rainbow',
-    defaultPalette: RAINBOW7,
+    defaultPalette: RAINBOW6,
+    maxPaletteColors: 6,
     hasDirection: true,
     frames: rainbowFrames,
   },
@@ -366,6 +390,7 @@ export const EFFECTS: EffectDef[] = [
     id: 'sparse-confetti',
     name: 'Confetti',
     defaultPalette: [RED, ORANGE, YELLOW, GREEN, BLUE],
+    maxPaletteColors: 7,
     hasDirection: false,
     frames: sparseConfettiFrames,
   },
@@ -373,13 +398,15 @@ export const EFFECTS: EffectDef[] = [
     id: 'speckles',
     name: 'Speckles',
     defaultPalette: [PURPLE, MAGENTA],
+    maxPaletteColors: 7,
     hasDirection: false,
     frames: specklesFrames,
   },
   {
     id: 'bands',
     name: 'Bands',
-    defaultPalette: [RED, ORANGE, YELLOW, GREEN],
+    defaultPalette: RAINBOW6,
+    maxPaletteColors: 6,
     hasDirection: true,
     frames: bandsFrames,
   },
@@ -387,6 +414,7 @@ export const EFFECTS: EffectDef[] = [
     id: 'diagonal',
     name: 'Diagonal',
     defaultPalette: [RED, WHITE],
+    maxPaletteColors: 7,
     hasDirection: true,
     frames: diagonalFrames,
   },
@@ -394,6 +422,7 @@ export const EFFECTS: EffectDef[] = [
     id: 'rainbow-diagonal',
     name: 'Rainbow diagonal',
     defaultPalette: [RED, ORANGE, YELLOW, GREEN, BLUE],
+    maxPaletteColors: 7,
     hasDirection: true,
     frames: rainbowDiagonalFrames,
   },
@@ -401,6 +430,7 @@ export const EFFECTS: EffectDef[] = [
     id: 'full-confetti',
     name: 'Full confetti',
     defaultPalette: [RED, ORANGE, YELLOW, GREEN, BLUE, MAGENTA],
+    maxPaletteColors: 7,
     hasDirection: false,
     frames: fullConfettiFrames,
   },
