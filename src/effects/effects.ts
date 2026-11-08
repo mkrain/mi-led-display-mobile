@@ -13,13 +13,25 @@ import {applyBrightness} from '../lamp/lamp';
  * 50% speed, measured by sampling a frame a second and
  * finding the shift that best aligns consecutive frames:
  *
- *   1 Rainbow bands: scroll up 2 rows/sec, loop 8s
+ *   1 Rainbow bands: scroll down 2 rows/sec, loop 8s
  *   2 Sparse confetti: random twinkle in place
  *   3 Purple field + white speckles: slow twinkle
- *   4 Vertical bands (4 colours): scroll left ~4.5 cols/sec
+ *   4 Vertical bands (4 colours): scroll right ~4.5 cols/sec
  *   5 Diagonal stripes: scroll diagonally, fastest
  *   6 Diagonal rainbow: bands advance one hue step/sec
  *   7 Full confetti: every pixel re-randomizes each second
+ *
+ * Direction note, Nov 8, 2026: the first build read the
+ * shift analysis backwards — the aligning roll is the
+ * inverse of the motion, not the motion itself — so
+ * rainbow and bands shipped scrolling the wrong way
+ * (up and left). Jeremiah reported the rainbow bands
+ * travel row 1 to row 16, like a train, and a re-run
+ * with the sign fixed confirms down 2 rows/sec for
+ * rainbow and right ~4.5 cols/sec for bands. The
+ * diagonal effects cannot be pinned down that way
+ * (their patterns alias), so their direction is the
+ * best reading of the hue advance, not a measurement.
  *
  * Effect 1's loop is 8 seconds, and frames 8 seconds
  * apart are near-identical, so the save is 8 frames at
@@ -157,9 +169,11 @@ const RAINBOW7: RGB[] = [RED, ORANGE, YELLOW, GREEN, BLUE, MAGENTA, WHITE];
 
 /**
  * 1 Rainbow: vertical hue bands (preview orientation),
- * scrolling left at 2 columns per frame at 50%. After
+ * scrolling right at 2 columns per frame at 50%. After
  * the default 90-degree clockwise rotation the panel
- * shows horizontal bands scrolling up at 2 rows/sec.
+ * shows horizontal bands scrolling down at 2 rows/sec
+ * — a colour travels row 1 to row 16, the rest of the
+ * cycle following like a train (Jeremiah, Nov 8, 2026).
  */
 function rainbowFrames(params: EffectParams, count: number): Grid[] {
   const step = 2 * speedFactor(params.speed);
@@ -169,10 +183,10 @@ function rainbowFrames(params: EffectParams, count: number): Grid[] {
     const grid = blank();
     for (let r = 0; r < 16; r++) {
       for (let c = 0; c < 16; c++) {
-        grid[r * 16 + c] = [
-          ...(params.palette[(c + offset) % params.palette.length] ??
-            RED),
-        ] as RGB;
+        const idx =
+          ((c - offset) % params.palette.length + params.palette.length) %
+          params.palette.length;
+        grid[r * 16 + c] = [...(params.palette[idx] ?? RED)] as RGB;
       }
     }
     out.push(withBrightness(grid, params.brightness));
@@ -247,9 +261,9 @@ function specklesFrames(params: EffectParams, count: number): Grid[] {
 
 /**
  * 4 Bands: four colours in 4-row bands (preview
- * orientation), scrolling down at 4.5 rows per frame
+ * orientation), scrolling up at 4.5 rows per frame
  * at 50%. After the default rotation the panel shows
- * vertical bands scrolling left at ~4.5 cols/sec.
+ * vertical bands scrolling right at ~4.5 cols/sec.
  */
 function bandsFrames(params: EffectParams, count: number): Grid[] {
   const step = 4.5 * speedFactor(params.speed);
@@ -258,7 +272,7 @@ function bandsFrames(params: EffectParams, count: number): Grid[] {
     const offset = f * step;
     const grid = blank();
     for (let r = 0; r < 16; r++) {
-      const band = Math.floor((r - offset) / 4) % params.palette.length;
+      const band = Math.floor((r + offset) / 4) % params.palette.length;
       const colour =
         params.palette[((band % params.palette.length) + params.palette.length) % params.palette.length] ??
         RED;

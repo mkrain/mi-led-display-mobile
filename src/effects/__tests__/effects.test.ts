@@ -75,14 +75,18 @@ describe('EFFECTS', () => {
 });
 
 describe('rainbow', () => {
-  test('vertical hue bands, scrolling left 2 columns per frame at 50%', () => {
+  test('vertical hue bands, scrolling right 2 columns per frame at 50%', () => {
     const {def, params} = paramsFor('rainbow');
     const frames = def.frames(params, 3);
     const pal = def.defaultPalette;
     for (let c = 0; c < 16; c++) {
       expect(frames[0][c]).toEqual(pal[c % pal.length]);
-      expect(frames[1][c]).toEqual(pal[(c + 2) % pal.length]);
-      expect(frames[2][c]).toEqual(pal[(c + 4) % pal.length]);
+      expect(frames[1][c]).toEqual(
+        pal[((c - 2) % pal.length + pal.length) % pal.length],
+      );
+      expect(frames[2][c]).toEqual(
+        pal[((c - 4) % pal.length + pal.length) % pal.length],
+      );
     }
     // Rows are uniform within a frame.
     expect(frames[0][16]).toEqual(frames[0][0]);
@@ -92,12 +96,12 @@ describe('rainbow', () => {
     const {def, params} = paramsFor('rainbow', {speed: 100});
     const frames = def.frames(params, 2);
     const pal = def.defaultPalette;
-    expect(frames[1][0]).toEqual(pal[4 % pal.length]);
+    expect(frames[1][0]).toEqual(pal[3]);
   });
 });
 
 describe('bands', () => {
-  test('four colours in 4-row bands, scrolling down', () => {
+  test('four colours in 4-row bands, scrolling up', () => {
     const {def, params} = paramsFor('bands');
     const frames = def.frames(params, 2);
     const pal = def.defaultPalette;
@@ -107,10 +111,10 @@ describe('bands', () => {
       expect(frames[0][(r + 8) * 16]).toEqual(pal[2]);
       expect(frames[0][(r + 12) * 16]).toEqual(pal[3]);
     }
-    // Frame 1, offset 4.5 rows down: row 0 shows band 2,
-    // row 8 shows band 0.
-    expect(frames[1][0]).toEqual(pal[2]);
-    expect(frames[1][8 * 16]).toEqual(pal[0]);
+    // Frame 1, offset 4.5 rows up: row 0 shows band 1,
+    // row 8 shows band 3.
+    expect(frames[1][0]).toEqual(pal[1]);
+    expect(frames[1][8 * 16]).toEqual(pal[3]);
   });
 });
 
