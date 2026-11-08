@@ -504,6 +504,31 @@ export async function savePictureToDevice(pixels: PixelGrid): Promise<void> {
 }
 
 /**
+ * Fast static save (Nov 8, 2026): the stock app's save, read
+ * from offe's snoops/saves_to_device_with_summary.txt — open,
+ * init, 8 stored blocks, end, close, then slideshow mode,
+ * with NO Reset anywhere. The two Reset frames in that snoop
+ * (lines 92, 181) are the researcher's manual reset at the
+ * start of the session, before any save. Our Replace sequence
+ * added Reset to cure the blank slot the Reset+Save burst
+ * created, but Reset drops the link and forces a ~20s
+ * reconnect scan, so a lamp colour took ~30s to apply where
+ * the stock app applies it in about a second. This is the
+ * fast path: the same stored blocks as a slideshow save,
+ * then slideshow mode so the panel shows the saved set.
+ * It APPENDS to the saved set — it does not wipe — so
+ * repeated lamp changes accumulate images unless the panel
+ * overwrites the slot; the Lamp device test settles that.
+ */
+export async function saveStaticPictureToDevice(
+  pixels: PixelGrid,
+): Promise<void> {
+  await savePictureToDevice(pixels);
+  await writeCommand(slideshowCommand());
+  await sleep(2);
+}
+
+/**
  * DESTRUCTIVE TEST, Oct 30, 2026: send ONLY the Reset command
  * (BC 00 15 15 55), with no save in the same burst. This is the
  * control the Reset+Save burst lacks: the manual Reset →

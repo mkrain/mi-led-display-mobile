@@ -4,7 +4,7 @@ import Slider from '@react-native-community/slider';
 import {PixelGrid, rgbToCss} from '../components/PixelGrid';
 import {ColorPad} from '../components/ColorPad';
 import {BottomMenu} from '../components/BottomMenu';
-import {saveSlideshowReplace} from '../ble/device';
+import {saveStaticPictureToDevice} from '../ble/device';
 import {useConnectionState} from '../state/ConnectionState';
 import {useLampState} from '../state/LampState';
 import {LAMP_PRESETS, LAMP_PRESET_NAMES, lampGrid} from '../lamp/lamp';
@@ -16,17 +16,22 @@ import {LAMP_PRESETS, LAMP_PRESET_NAMES, lampGrid} from '../lamp/lamp';
  * Stock behaviour, from the stock tab's screenshots:
  * a colour wheel, six presets, a brightness slider, and
  * a selection is automatically saved to the panel as a
- * static display. No lamp command exists in either
- * public protocol reference, so the save uses the
- * proven Replace sequence (Reset, reconnect, save one
- * solid picture, slideshow mode). That costs ~30s a
- * save, most of it the 20s reconnect scan, and it
- * replaces whatever is saved on the panel — the note
- * under the preview says so plainly.
+ * static display. The save is the stock app's own fast
+ * save (Nov 8, 2026): open, init, 8 stored blocks, end,
+ * close, then slideshow mode — read from offe's snoop
+ * of a stock save, which has no Reset in it. The first
+ * version of this tab used the Replace sequence instead
+ * (Reset, reconnect, save), and a lamp colour took ~30s
+ * to apply where the stock app applies it in about a
+ * second, because Reset drops the link and forces a
+ * ~20s reconnect scan. The fast save appends to the
+ * saved set instead of wiping it, so repeated lamp
+ * changes accumulate images unless the panel overwrites
+ * the slot — the device test settles that.
  *
  * Auto-save is debounced, not per move event: dragging
- * the colour pad fires dozens of changes, and each
- * save is a ~30s Replace. The save runs 1s after the
+ * the colour pad fires dozens of changes, and each save
+ * still takes about a second. The save runs 1s after the
  * last change. A change made while a save is running
  * waits and re-saves with the latest values when the
  * running save finishes. Nothing saves on mount, and
@@ -67,10 +72,10 @@ export function LampScreen() {
       return;
     }
     savingRef.current = true;
+    setStatus('Saving lamp colour…');
     try {
-      await saveSlideshowReplace(
-        [lampGrid(colorRef.current, brightnessRef.current)],
-        setStatus,
+      await saveStaticPictureToDevice(
+        lampGrid(colorRef.current, brightnessRef.current),
       );
       setStatus('Lamp saved — the panel shows this colour.');
     } catch (e) {
@@ -118,7 +123,8 @@ export function LampScreen() {
         <Text style={styles.status}>{status}</Text>
         <PixelGrid pixels={preview} cellSize={20} />
         <Text style={styles.note}>
-          Saving a lamp colour replaces whatever is saved on the panel.
+          Saves to the panel as a single image — no disconnect, about a
+          second.
         </Text>
         <ColorPad
           color={color}
