@@ -1,8 +1,8 @@
 /**
  * MI LED Display — bare React Native app (no Expo).
- * One simple stack: Connect -> Draw / Photo / Slideshow / Lamp,
+ * One simple stack: Connect -> Draw / Photo / Slideshow / Mode,
  * with a persistent BottomMenu (Connect / Draw / Photo /
- * Slideshow / Lamp) on every screen.
+ * Slideshow / Mode) on every screen.
  * @format
  */
 
@@ -13,7 +13,7 @@ import {SafeAreaProvider} from 'react-native-safe-area-context';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {ConnectScreen} from './src/screens/ConnectScreen';
 import {DrawScreen} from './src/screens/DrawScreen';
-import {LampScreen} from './src/screens/LampScreen';
+import {ModeScreen} from './src/screens/ModeScreen';
 import {PhotoScreen} from './src/screens/PhotoScreen';
 import {SlideshowScreen} from './src/screens/SlideshowScreen';
 import {PhotoStateProvider} from './src/state/PhotoState';
@@ -27,7 +27,7 @@ export type RootStackParamList = {
   Draw: undefined;
   Photo: undefined;
   Slideshow: undefined;
-  Lamp: undefined;
+  Mode: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -66,8 +66,8 @@ function App() {
           options={{gestureEnabled: false}}
         />
         <Stack.Screen
-          name="Lamp"
-          component={LampScreen}
+          name="Mode"
+          component={ModeScreen}
           options={{gestureEnabled: false}}
         />
       </Stack.Navigator>

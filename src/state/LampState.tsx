@@ -8,7 +8,7 @@ import type {RGB} from '../conversion/convert';
 
 /**
  * Lamp tab state, held above the navigator instead of
- * inside LampScreen (Nov 8, 2026). Same reason as
+ * inside the Lamplight subtab (Nov 8, 2026). Same reason as
  * DrawState: switching tabs can pop the screen off the
  * stack and destroy its local useState, so a lamp colour
  * picked on the Lamp tab would reset on return. State
