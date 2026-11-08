@@ -18,6 +18,7 @@ import {
   EFFECT_FRAME_COUNT,
   MAX_PALETTE_COLORS,
   effectFrames,
+  effectivePalette,
   nextEffectIndex,
   prevEffectIndex,
   speedFactor,
@@ -40,12 +41,18 @@ import type {RGB} from '../conversion/convert';
  * at the panel's rate (1 frame per second at 50%
  * speed), so what you see is what the panel plays.
  *
- * The palette is the effect's colour set: tapping a
- * dot selects it, dragging the hue strip edits the
- * selected entry live, + adds the current colour, and
- * the trash removes the selected entry (never the
- * last one). A new preset brings its own default
- * palette.
+ * The palette is the effect's colour set. The hue
+ * strip sets a working colour only — it never
+ * overwrites a palette entry — and the preview and
+ * the palette row show the palette with the selected
+ * entry replaced by that working colour, so dragging
+ * the pad stays live. Tapping a dot selects it, +
+ * appends the working colour as a new dot, and the
+ * trash removes the selected entry (never the last
+ * one). Saving writes the shown palette and commits
+ * it. Selection is by index, so duplicate colours in
+ * the palette are handled. A new preset brings its
+ * own default palette.
  *
  * The preview is a swipe target: swiping it left or
  * right changes the effect, wrapping at the ends
@@ -71,6 +78,8 @@ export function LightEffectTab() {
     setPalette,
     color,
     setColor,
+    selectedPaletteIndex,
+    setSelectedPaletteIndex,
     brightness,
     setBrightness,
     speed,
@@ -91,6 +100,16 @@ export function LightEffectTab() {
 
   const def = EFFECTS[effectIndex];
 
+  // The palette as shown: the committed palette with
+  // the selected entry replaced by the working colour.
+  // The preview, the palette row, and the save all use
+  // this, so what you see is what the panel gets.
+  const displayPalette = effectivePalette(
+    palette,
+    selectedPaletteIndex,
+    color,
+  );
+
   // The preview frames: preview orientation, no
   // rotation, reverse applied so the preview shows
   // the motion the panel will play.
@@ -98,12 +117,12 @@ export function LightEffectTab() {
     () =>
       effectFrames(
         def,
-        {palette, brightness, speed},
+        {palette: displayPalette, brightness, speed},
         EFFECT_FRAME_COUNT,
         0,
         reverse,
       ),
-    [def, palette, brightness, speed, reverse],
+    [def, displayPalette, brightness, speed, reverse],
   );
 
   // Advance the preview at the panel's rate: one
@@ -121,7 +140,7 @@ export function LightEffectTab() {
       1000 / speedFactor(speed),
     );
     return () => clearInterval(interval);
-  }, [speed, effectIndex, palette, brightness, reverse]);
+  }, [speed, effectIndex, displayPalette, brightness, reverse]);
 
   const preview = previewFrames[frameIndex] ?? previewFrames[0];
 
@@ -143,48 +162,45 @@ export function LightEffectTab() {
   });
 
   function onHueChange(next: RGB) {
-    // Editing the selected palette entry live: if the
-    // current colour is a palette entry, that entry
-    // becomes the new colour. Otherwise just select
-    // the new colour — + adds it to the palette.
-    const idx = palette.findIndex(
-      c => c[0] === color[0] && c[1] === color[1] && c[2] === color[2],
-    );
+    // The hue strip sets the working colour only. It
+    // never overwrites a palette entry — that is what
+    // made + a no-op (the colour was already in the
+    // palette, so the duplicate guard refused it) and
+    // cost the selected dot its old colour. The
+    // preview and the palette row show the working
+    // colour in the selected slot, so dragging the pad
+    // still updates live.
     setColor(next);
-    if (idx >= 0) {
-      const nextPalette = [...palette];
-      nextPalette[idx] = next;
-      setPalette(nextPalette);
-    }
   }
 
   function addColour() {
     if (palette.length >= MAX_PALETTE_COLORS) {
       return;
     }
-    if (
-      palette.some(
-        c => c[0] === color[0] && c[1] === color[1] && c[2] === color[2],
-      )
-    ) {
-      return;
-    }
-    setPalette([...palette, color]);
+    // Append the working colour as a new dot and
+    // select it. No duplicate guard: the working
+    // colour is only in the palette once + is pressed,
+    // and selection is by index, so a duplicate dot
+    // is a copy, not an ambiguity.
+    const nextPalette = [...palette, color];
+    setPalette(nextPalette);
+    setSelectedPaletteIndex(nextPalette.length - 1);
   }
 
   function removeColour() {
     if (palette.length <= 1) {
       return;
     }
-    const idx = palette.findIndex(
-      c => c[0] === color[0] && c[1] === color[1] && c[2] === color[2],
+    const nextPalette = palette.filter(
+      (_, i) => i !== selectedPaletteIndex,
     );
-    if (idx < 0) {
-      return;
-    }
-    const nextPalette = palette.filter((_, i) => i !== idx);
+    const nextIndex = Math.min(
+      selectedPaletteIndex,
+      nextPalette.length - 1,
+    );
     setPalette(nextPalette);
-    setColor(nextPalette[0]);
+    setSelectedPaletteIndex(nextIndex);
+    setColor(nextPalette[nextIndex]);
   }
 
   async function save() {
@@ -201,12 +217,16 @@ export function LightEffectTab() {
     try {
       const frames = effectFrames(
         def,
-        {palette, brightness, speed},
+        {palette: displayPalette, brightness, speed},
         EFFECT_FRAME_COUNT,
         rotation,
         reverse,
       );
       await saveEffectToDevice(frames);
+      // Commit the shown palette: the panel now holds
+      // it, so the app's palette matches what was
+      // saved instead of the pre-pad version.
+      setPalette(displayPalette);
       setStatus('Effect saved — the panel plays it on a loop.');
     } catch (e) {
       setStatus(
@@ -217,10 +237,6 @@ export function LightEffectTab() {
       setSaving(false);
     }
   }
-
-  const selectedPaletteIndex = palette.findIndex(
-    c => c[0] === color[0] && c[1] === color[1] && c[2] === color[2],
-  );
 
   return (
     <ScrollView
@@ -256,36 +272,43 @@ export function LightEffectTab() {
         pure)
       </Text>
       <View style={styles.paletteRow}>
-        {palette.map((c, i) => (
+        <View style={styles.paletteDots}>
+          {displayPalette.map((c, i) => (
+            <TouchableOpacity
+              key={i}
+              accessibilityLabel={`Palette colour ${i + 1}`}
+              onPress={() => {
+                setSelectedPaletteIndex(i);
+                setColor(displayPalette[i]);
+              }}
+              style={[
+                styles.paletteDot,
+                {backgroundColor: rgbToCss(c)},
+                i === selectedPaletteIndex
+                  ? styles.paletteDotSelected
+                  : undefined,
+              ]}
+            />
+          ))}
+        </View>
+        <View style={styles.paletteButtons}>
+          {palette.length < MAX_PALETTE_COLORS ? (
+            <TouchableOpacity
+              accessibilityLabel="Add colour"
+              onPress={addColour}
+              style={styles.paletteButton}
+            >
+              <Text style={styles.paletteButtonLabel}>+</Text>
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity
-            key={i}
-            accessibilityLabel={`Palette colour ${i + 1}`}
-            onPress={() => setColor(c)}
-            style={[
-              styles.paletteDot,
-              {backgroundColor: rgbToCss(c)},
-              i === selectedPaletteIndex
-                ? styles.paletteDotSelected
-                : undefined,
-            ]}
-          />
-        ))}
-        {palette.length < MAX_PALETTE_COLORS ? (
-          <TouchableOpacity
-            accessibilityLabel="Add colour"
-            onPress={addColour}
+            accessibilityLabel="Remove colour"
+            onPress={removeColour}
             style={styles.paletteButton}
           >
-            <Text style={styles.paletteButtonLabel}>+</Text>
+            <Text style={styles.paletteButtonLabel}>×</Text>
           </TouchableOpacity>
-        ) : null}
-        <TouchableOpacity
-          accessibilityLabel="Remove colour"
-          onPress={removeColour}
-          style={styles.paletteButton}
-        >
-          <Text style={styles.paletteButtonLabel}>×</Text>
-        </TouchableOpacity>
+        </View>
       </View>
       <Text style={styles.rgbText}>
         R:{color[0]} G:{color[1]} B:{color[2]}
@@ -409,6 +432,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginVertical: 4,
+    width: '100%',
+  },
+  // The dots take the left side and wrap if the
+  // palette is full; the + and × sit in their own
+  // container pinned to the right, so they never move
+  // when a dot is added or removed.
+  paletteDots: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    flexWrap: 'wrap',
+  },
+  paletteButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   paletteDot: {
     width: 36,

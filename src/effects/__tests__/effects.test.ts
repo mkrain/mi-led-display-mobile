@@ -3,6 +3,7 @@ import {
   EFFECT_FRAME_COUNT,
   MAX_PALETTE_COLORS,
   effectFrames,
+  effectivePalette,
   nextEffectIndex,
   prevEffectIndex,
   rotateGrid,
@@ -156,6 +157,26 @@ describe('swipe navigation', () => {
   test('previous wraps from the first effect to the last', () => {
     expect(prevEffectIndex(0)).toBe(6);
     expect(prevEffectIndex(3)).toBe(2);
+  });
+});
+
+describe('effectivePalette', () => {
+  const PURPLE: [number, number, number] = [154, 110, 255];
+  const palette: [number, number, number][] = [
+    [255, 0, 0],
+    [255, 152, 0],
+    [255, 255, 0],
+  ];
+
+  test('replaces only the selected entry with the working colour', () => {
+    const shown = effectivePalette(palette, 0, PURPLE);
+    expect(shown).toEqual([PURPLE, [255, 152, 0], [255, 255, 0]]);
+    expect(palette[0]).toEqual([255, 0, 0]);
+  });
+
+  test('an out-of-range selection leaves the palette unchanged', () => {
+    expect(effectivePalette(palette, 3, PURPLE)).toEqual(palette);
+    expect(effectivePalette(palette, -1, PURPLE)).toEqual(palette);
   });
 });
 

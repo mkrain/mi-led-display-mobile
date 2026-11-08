@@ -39,6 +39,9 @@ export type EffectState = {
   /** The selected colour, from the hue strip or a palette dot. */
   color: RGB;
   setColor: (color: RGB) => void;
+  /** The palette entry the hue strip is editing, by index. */
+  selectedPaletteIndex: number;
+  setSelectedPaletteIndex: (index: number) => void;
   /** Brightness percent, 0-100. */
   brightness: number;
   setBrightness: (percent: number) => void;
@@ -61,6 +64,7 @@ export function EffectStateProvider({children}: {children: ReactNode}) {
     ...EFFECTS[0].defaultPalette,
   ]);
   const [color, setColor] = useState<RGB>([255, 0, 0]);
+  const [selectedPaletteIndex, setSelectedPaletteIndex] = useState(0);
   const [brightness, setBrightness] = useState(100);
   const [speed, setSpeed] = useState(50);
   const [rotation, setRotation] = useState(1);
@@ -68,8 +72,11 @@ export function EffectStateProvider({children}: {children: ReactNode}) {
 
   function setEffectIndex(index: number) {
     setEffectIndexState(index);
-    // A new preset brings its own default palette.
+    // A new preset brings its own default palette, and
+    // the selection resets to its first colour.
     setPalette([...EFFECTS[index].defaultPalette]);
+    setColor(EFFECTS[index].defaultPalette[0]);
+    setSelectedPaletteIndex(0);
   }
 
   return (
@@ -81,6 +88,8 @@ export function EffectStateProvider({children}: {children: ReactNode}) {
         setPalette,
         color,
         setColor,
+        selectedPaletteIndex,
+        setSelectedPaletteIndex,
         brightness,
         setBrightness,
         speed,

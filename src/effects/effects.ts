@@ -447,3 +447,26 @@ export function nextEffectIndex(index: number): number {
 export function prevEffectIndex(index: number): number {
   return (index - 1 + EFFECTS.length) % EFFECTS.length;
 }
+
+/**
+ * The palette the preview and the palette row show
+ * (Nov 8, 2026): the committed palette with the
+ * selected entry replaced by the working colour. The
+ * hue strip sets the working colour only — it never
+ * overwrites a palette entry — so the preview stays
+ * live while the committed palette is only changed
+ * by + and the trash. + appends the working colour
+ * as a new dot; saving commits this palette.
+ */
+export function effectivePalette(
+  palette: RGB[],
+  selectedIndex: number,
+  color: RGB,
+): RGB[] {
+  if (selectedIndex < 0 || selectedIndex >= palette.length) {
+    return [...palette];
+  }
+  const next = [...palette];
+  next[selectedIndex] = color;
+  return next;
+}
