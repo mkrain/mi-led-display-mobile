@@ -558,22 +558,27 @@ export async function saveLampColorAllSlots(
 }
 
 /**
- * Write a Lamp 0x02 sequence: 2 ms after the 0x11 bracket
+ * Write a Lamp 0x02 sequence: 50 ms after the 0x11 bracket
  * commands (first and second-to-last), back-to-back
  * between the 0x02 writes, 2 ms after the trailing
- * slideshow mode. The first all-slots build used
- * SpawnDev's 50 ms / 5 ms gaps — about 420 ms of
- * sleeping alone — and the stock app applies a lamp
- * colour almost immediately. The gaps were never
- * measured against this panel; the proven save uses
- * 2 ms around short frames. If the panel drops writes
- * at this pace, the colour comes out wrong on the
- * panel and the gaps go back up.
+ * slideshow mode. The back-to-back build (2 ms brackets)
+ * showed no colour at all: the 0x11 enable is a mode
+ * change, and 2 ms later the panel was likely not in
+ * write mode yet, so the whole sequence went nowhere.
+ * The proven build used 50 ms brackets and 5 ms between
+ * chunks. This build changes one variable — it keeps the
+ * 50 ms bracket settle and drops only the chunk gaps.
+ * If the colour lands, the bracket settle was the
+ * critical gap and the chunk gaps were the waste. If it
+ * still shows nothing, the chunk gaps were critical
+ * instead.
  */
 async function saveLampCommands(commands: number[][]): Promise<void> {
   for (let i = 0; i < commands.length; i++) {
     await writeCommand(commands[i]);
-    if (i === 0 || i >= commands.length - 2) {
+    if (i === 0 || i === commands.length - 2) {
+      await sleep(50);
+    } else if (i === commands.length - 1) {
       await sleep(2);
     }
   }
