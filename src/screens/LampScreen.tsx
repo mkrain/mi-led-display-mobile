@@ -31,8 +31,9 @@ import {LAMP_PRESETS, LAMP_PRESET_NAMES, lampGrid} from '../lamp/lamp';
  *
  * Auto-save is debounced, not per move event: dragging
  * the colour pad fires dozens of changes, and each save
- * is 70 writes back-to-back. The save runs 1s after the
- * last change. A change made while a save is running
+ * is 70 writes at the proven pacing — 50 ms after the
+ * brackets, 5 ms between chunks. The save runs 1s after
+ * the last change. A change made while a save is running
  * waits and re-saves with the latest values when the
  * running save finishes. Nothing saves on mount, and
  * nothing saves while disconnected.

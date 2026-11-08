@@ -559,19 +559,22 @@ export async function saveLampColorAllSlots(
 
 /**
  * Write a Lamp 0x02 sequence: 50 ms after the 0x11 bracket
- * commands (first and second-to-last), back-to-back
- * between the 0x02 writes, 2 ms after the trailing
- * slideshow mode. The back-to-back build (2 ms brackets)
- * showed no colour at all: the 0x11 enable is a mode
- * change, and 2 ms later the panel was likely not in
- * write mode yet, so the whole sequence went nowhere.
- * The proven build used 50 ms brackets and 5 ms between
- * chunks. This build changes one variable — it keeps the
- * 50 ms bracket settle and drops only the chunk gaps.
- * If the colour lands, the bracket settle was the
- * critical gap and the chunk gaps were the waste. If it
- * still shows nothing, the chunk gaps were critical
- * instead.
+ * commands (first and second-to-last), 5 ms between the
+ * 0x02 writes, 2 ms after the trailing slideshow mode.
+ * This is the proven pacing (Nov 8, 2026, all-slots
+ * build): the colour lands static. Two faster variants
+ * both failed on device — back-to-back writes with
+ * 2 ms brackets showed no colour at all, and 50 ms
+ * brackets with back-to-back chunks also showed no
+ * colour — and worse, the failed sequences wedge the
+ * panel: live Draw/Photo sends stop working until a
+ * full slideshow save resets it. So an interrupted or
+ * too-fast 0x02 sequence leaves the panel stuck in
+ * write mode. Do not shorten these gaps without a
+ * device test from a known-good panel state, and
+ * note whether the panel was recovered (slideshow
+ * send) between tests: a wedge from an earlier run
+ * confounds the next run's result.
  */
 async function saveLampCommands(commands: number[][]): Promise<void> {
   for (let i = 0; i < commands.length; i++) {
@@ -580,6 +583,8 @@ async function saveLampCommands(commands: number[][]): Promise<void> {
       await sleep(50);
     } else if (i === commands.length - 1) {
       await sleep(2);
+    } else {
+      await sleep(5);
     }
   }
 }
