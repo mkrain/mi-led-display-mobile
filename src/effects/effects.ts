@@ -470,3 +470,22 @@ export function effectivePalette(
   next[selectedIndex] = color;
   return next;
 }
+
+/**
+ * The palette to send to the panel for an effect
+ * (Nov 9, 2026, PacketLogger rebuild). For most
+ * effects it is the palette as shown. Rainbow's
+ * cycle is the palette plus a fixed white step —
+ * the stock app sends white as the 7th palette
+ * colour (trace, Nov 8, 2026) — so white is
+ * appended here, not edited by the user. White is
+ * only appended when there is room (fewer than 7
+ * colours): a full 7-colour palette is sent as-is,
+ * so the send never exceeds the 7 the trace shows.
+ */
+export function sendPalette(def: EffectDef, palette: RGB[]): RGB[] {
+  if (def.id === 'rainbow' && palette.length < MAX_PALETTE_COLORS) {
+    return [...palette, WHITE];
+  }
+  return [...palette];
+}

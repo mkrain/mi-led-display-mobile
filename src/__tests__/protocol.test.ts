@@ -1,20 +1,21 @@
 import {
+  brightnessCommand,
   bytesToHex,
+  effectModeCommand,
+  effectSelectCommand,
   fullPictureBlockCommand,
   fullPictureCommands,
   graffitiInitCommands,
-  lampAllSlotsCommands,
-  lampSlotSaveCommands,
+  lampModeCommand,
+  paletteCommand,
   powerOffCommand,
   powerOnCommand,
   singlePixelCommand,
+  solidColourCommand,
+  speedCommand,
   resetCommand,
   resetSavedPictureCommands,
   savedPictureCommands,
-  slideShowImageWriteChunkCommand,
-  slideShowImageWriteDisableCommand,
-  slideShowImageWriteEnableCommand,
-  slideShowMarkerCommand,
   slideshowCommand,
   storedPictureBlockCommand,
   storedPictureChecksum,
@@ -147,86 +148,51 @@ describe('protocol bytes', () => {
     expect(bytesToHex(resetCommand())).toBe('bc00151555');
   });
 
-  test('lamp slot save: 14 commands, index 1 of a 1-image set, no Reset', () => {
-    const pixels: RGB[] = Array.from({length: 256}, () => [255, 0, 0] as RGB);
-    const commands = lampSlotSaveCommands(pixels);
-    expect(commands).toHaveLength(14);
-    // 0x11 brackets are the proven stock-snoop bytes.
-    expect(bytesToHex(commands[0])).toBe('bc0011f10355');
-    expect(bytesToHex(commands[12])).toBe('bc0011f20455');
-    // 0x02 short commands use SpawnDev's plain truncated sum:
-    // enable(1): 02+F1+01 = F4; disable(1): 02+F2+01 = F5.
-    expect(bytesToHex(slideShowImageWriteEnableCommand(1))).toBe(
-      'bc02f101f455',
+  test('mode protocol: exact bytes from the PacketLogger traces', () => {
+    // Mode selects: the third byte is the sum of the
+    // first two (plain-sum rule, same as the other
+    // Mode commands).
+    expect(bytesToHex(lampModeCommand())).toBe('bc000b0b55');
+    expect(bytesToHex(effectModeCommand())).toBe('bc000a0a55');
+    // Effect selects, live values from the narrated
+    // trace. Effect 4's live ck is 0F (0A+01+04);
+    // the preamble's 00 is a stale replay.
+    expect(bytesToHex(effectSelectCommand(1))).toBe('bc0a01010c55');
+    expect(bytesToHex(effectSelectCommand(2))).toBe('bc0a01020d55');
+    expect(bytesToHex(effectSelectCommand(4))).toBe('bc0a01040f55');
+    expect(bytesToHex(effectSelectCommand(7))).toBe('bc0a01071255');
+    expect(() => effectSelectCommand(0)).toThrow();
+    expect(() => effectSelectCommand(8)).toThrow();
+    // Solid colour: red 0B+FF = 0A; yellow 0B+FF+FF = 09.
+    expect(bytesToHex(solidColourCommand(255, 0, 0))).toBe('bc0bff00000a55');
+    expect(bytesToHex(solidColourCommand(0, 255, 0))).toBe('bc0b00ff000a55');
+    expect(bytesToHex(solidColourCommand(255, 255, 0))).toBe('bc0bffff000955');
+    expect(bytesToHex(solidColourCommand(255, 162, 0))).toBe('bc0bffa200ac55');
+    // Speed 50: 0A+07+32 = 43. Speed 81: 0A+07+51 = 62.
+    expect(bytesToHex(speedCommand(50))).toBe('bc0a07324355');
+    expect(bytesToHex(speedCommand(81))).toBe('bc0a07516255');
+    // Brightness 28: 10+1C = 2C. Brightness 80: 10+50 = 60.
+    expect(bytesToHex(brightnessCommand(28))).toBe('bc00101c2c55');
+    expect(bytesToHex(brightnessCommand(80))).toBe('bc0010506055');
+    // Rainbow palette, 7 colours, ck 0xAA — the exact
+    // bytes from the narrated trace.
+    const rainbow: RGB[] = [
+      [255, 0, 0],
+      [255, 162, 0],
+      [255, 255, 0],
+      [0, 255, 0],
+      [0, 0, 255],
+      [255, 0, 255],
+      [255, 255, 255],
+    ];
+    expect(bytesToHex(paletteCommand(rainbow))).toBe(
+      'bc0a0207ff0000ffa200ffff0000ff000000ffff00ffffffffaa55',
     );
-    expect(bytesToHex(slideShowImageWriteDisableCommand(1))).toBe(
-      'bc02f201f555',
-    );
-    expect(bytesToHex(commands[1])).toBe('bc02f101f455');
-    expect(bytesToHex(commands[11])).toBe('bc02f201f555');
-    // Marker: 02+07+3C = 45.
-    expect(bytesToHex(slideShowMarkerCommand())).toBe('bc02073c4555');
-    expect(bytesToHex(commands[10])).toBe('bc02073c4555');
-    // 8 chunks, 102 bytes each: BC 02 01 <chunk> + 96 bytes +
-    // checksum + 55. All-red chunk 1: 02+01+01+32*255 = 1FE4 -> E4.
-    // The checksum includes the chunk number, so each chunk is
-    // one more than the last.
-    for (let b = 0; b < 8; b++) {
-      const chunk = commands[2 + b];
-      expect(chunk).toHaveLength(102);
-      expect(chunk[0]).toBe(0xbc);
-      expect(chunk[1]).toBe(0x02);
-      expect(chunk[2]).toBe(1);
-      expect(chunk[3]).toBe(b + 1);
-      expect(chunk[100]).toBe(0xe4 + b);
-      expect(chunk[101]).toBe(0x55);
-    }
-    expect(commands[2].slice(4, 7)).toEqual([255, 0, 0]);
-    expect(bytesToHex(commands[13])).toBe('bc00121255');
-    const hex = commands.map(bytesToHex).join(' ');
-    expect(hex).not.toContain('bc00151555');
+    expect(() => paletteCommand([])).toThrow();
     expect(() =>
-      lampSlotSaveCommands(Array.from({length: 255}, () => [0, 0, 0] as RGB)),
-    ).toThrow();
-    expect(() =>
-      slideShowImageWriteChunkCommand(
-        1,
-        9,
-        Array.from({length: 32}, () => [0, 0, 0] as RGB),
+      paletteCommand(
+        Array.from({length: 8}, () => [255, 0, 0] as RGB),
       ),
-    ).toThrow();
-  });
-
-  test('lamp all slots: 70 commands, same colour in slots 1-8, no Reset', () => {
-    const pixels: RGB[] = Array.from({length: 256}, () => [255, 0, 0] as RGB);
-    const commands = lampAllSlotsCommands(pixels);
-    expect(commands).toHaveLength(70);
-    expect(bytesToHex(commands[0])).toBe('bc0011f10355');
-    // enable(8): 02+F1+08 = FB; disable(8): 02+F2+08 = FC.
-    expect(bytesToHex(commands[1])).toBe('bc02f108fb55');
-    expect(bytesToHex(commands[67])).toBe('bc02f208fc55');
-    // 64 chunks: image 1-8, chunk 1-8 each, 102 bytes.
-    // All-red chunk, image 1 chunk 1: 02+01+01+32*255 = 1FE4 -> E4.
-    // Image 8 chunk 8: 02+08+08+32*255 = 1FF2 -> F2.
-    for (let image = 1; image <= 8; image++) {
-      for (let b = 0; b < 8; b++) {
-        const chunk = commands[2 + (image - 1) * 8 + b];
-        expect(chunk).toHaveLength(102);
-        expect(chunk[0]).toBe(0xbc);
-        expect(chunk[1]).toBe(0x02);
-        expect(chunk[2]).toBe(image);
-        expect(chunk[3]).toBe(b + 1);
-        expect(chunk[100]).toBe((0xe4 + (image - 1) + b) % 256);
-        expect(chunk[101]).toBe(0x55);
-      }
-    }
-    expect(bytesToHex(commands[66])).toBe('bc02073c4555');
-    expect(bytesToHex(commands[68])).toBe('bc0011f20455');
-    expect(bytesToHex(commands[69])).toBe('bc00121255');
-    const hex = commands.map(bytesToHex).join(' ');
-    expect(hex).not.toContain('bc00151555');
-    expect(() =>
-      lampAllSlotsCommands(Array.from({length: 255}, () => [0, 0, 0] as RGB)),
     ).toThrow();
   });
 });

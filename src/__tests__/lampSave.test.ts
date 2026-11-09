@@ -1,13 +1,14 @@
 import BleManager from 'react-native-ble-manager';
 import {clearConnection, setConnection} from '../ble/connection';
 import {
-  saveEffectToDevice,
-  saveLampColor,
-  saveLampColorAllSlots,
+  selectEffect,
+  sendEffectBrightness,
+  sendEffectPalette,
+  sendEffectSpeed,
+  sendLampColour,
   saveStaticPictureToDevice,
 } from '../ble/device';
 import {solidGrid} from '../lamp/lamp';
-import {EFFECTS, effectFrames} from '../effects/effects';
 
 const writes = BleManager.writeWithoutResponse as jest.Mock;
 
@@ -53,7 +54,7 @@ describe('saveStaticPictureToDevice', () => {
   });
 });
 
-describe('saveLampColor', () => {
+describe('sendLampColour', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     clearConnection();
@@ -64,35 +65,22 @@ describe('saveLampColor', () => {
     clearConnection();
   });
 
-  test('slot save: 14 writes, index 1 of 1, no Reset, no 0x0F chunks', async () => {
-    await saveLampColor(solidGrid([255, 0, 0]));
+  test('lamp mode + one colour write + brightness, no 0x0F/0x02/0x11', async () => {
+    await sendLampColour([255, 0, 0], 29);
     const sent: number[][] = writes.mock.calls.map(call => call[3] as number[]);
-    expect(sent).toHaveLength(14);
-    expect(sent[0]).toEqual([0xbc, 0x00, 0x11, 0xf1, 0x03, 0x55]);
-    expect(sent[1]).toEqual([0xbc, 0x02, 0xf1, 0x01, 0xf4, 0x55]);
-    for (let i = 0; i < 8; i += 1) {
-      expect(sent[2 + i][0]).toBe(0xbc);
-      expect(sent[2 + i][1]).toBe(0x02);
-      expect(sent[2 + i][2]).toBe(1);
-      expect(sent[2 + i][3]).toBe(i + 1);
-      expect(sent[2 + i]).toHaveLength(102);
-      expect(sent[2 + i][101]).toBe(0x55);
-    }
-    expect(sent[10]).toEqual([0xbc, 0x02, 0x07, 0x3c, 0x45, 0x55]);
-    expect(sent[11]).toEqual([0xbc, 0x02, 0xf2, 0x01, 0xf5, 0x55]);
-    expect(sent[12]).toEqual([0xbc, 0x00, 0x11, 0xf2, 0x04, 0x55]);
-    expect(sent[13]).toEqual([0xbc, 0x00, 0x12, 0x12, 0x55]);
-    // No Reset anywhere, and no 0x0F live/stored chunks:
-    // the slot save must not be the append path in disguise.
-    const hex = sent
-      .map(bytes => bytes.map(b => b.toString(16).padStart(2, '0')).join(''))
-      .join(' ');
-    expect(hex).not.toContain('bc00151555');
+    expect(sent).toHaveLength(3);
+    expect(sent[0]).toEqual([0xbc, 0x00, 0x0b, 0x0b, 0x55]);
+    expect(sent[1]).toEqual([0xbc, 0x0b, 0xff, 0x00, 0x00, 0x0a, 0x55]);
+    expect(sent[2]).toEqual([0xbc, 0x00, 0x10, 0x1d, 0x2d, 0x55]);
+    // No frames, no slideshow, no Reset: the colour is
+    // one 7-byte write, not a 70-write save.
     expect(sent.some(bytes => bytes[1] === 0x0f)).toBe(false);
+    expect(sent.some(bytes => bytes[1] === 0x02)).toBe(false);
+    expect(sent.some(bytes => bytes[1] === 0x11)).toBe(false);
   });
 });
 
-describe('saveLampColorAllSlots', () => {
+describe('selectEffect', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     clearConnection();
@@ -103,36 +91,36 @@ describe('saveLampColorAllSlots', () => {
     clearConnection();
   });
 
-  test('all slots: 70 writes, count 8, indices 1-8, no Reset, no 0x0F', async () => {
-    await saveLampColorAllSlots(solidGrid([255, 0, 0]));
+  test('effect 1: mode + select + palette + speed + brightness', async () => {
+    const palette: [number, number, number][] = [
+      [255, 0, 0],
+      [255, 162, 0],
+      [255, 255, 0],
+      [0, 255, 0],
+      [0, 0, 255],
+      [255, 0, 255],
+      [255, 255, 255],
+    ];
+    await selectEffect(1, palette, 50, 100);
     const sent: number[][] = writes.mock.calls.map(call => call[3] as number[]);
-    expect(sent).toHaveLength(70);
-    expect(sent[0]).toEqual([0xbc, 0x00, 0x11, 0xf1, 0x03, 0x55]);
-    expect(sent[1]).toEqual([0xbc, 0x02, 0xf1, 0x08, 0xfb, 0x55]);
-    for (let image = 1; image <= 8; image++) {
-      for (let b = 0; b < 8; b++) {
-        const chunk = sent[2 + (image - 1) * 8 + b];
-        expect(chunk[0]).toBe(0xbc);
-        expect(chunk[1]).toBe(0x02);
-        expect(chunk[2]).toBe(image);
-        expect(chunk[3]).toBe(b + 1);
-        expect(chunk).toHaveLength(102);
-        expect(chunk[101]).toBe(0x55);
-      }
-    }
-    expect(sent[66]).toEqual([0xbc, 0x02, 0x07, 0x3c, 0x45, 0x55]);
-    expect(sent[67]).toEqual([0xbc, 0x02, 0xf2, 0x08, 0xfc, 0x55]);
-    expect(sent[68]).toEqual([0xbc, 0x00, 0x11, 0xf2, 0x04, 0x55]);
-    expect(sent[69]).toEqual([0xbc, 0x00, 0x12, 0x12, 0x55]);
-    const hex = sent
-      .map(bytes => bytes.map(b => b.toString(16).padStart(2, '0')).join(''))
-      .join(' ');
-    expect(hex).not.toContain('bc00151555');
+    expect(sent).toHaveLength(5);
+    expect(sent[0]).toEqual([0xbc, 0x00, 0x0a, 0x0a, 0x55]);
+    expect(sent[1]).toEqual([0xbc, 0x0a, 0x01, 0x01, 0x0c, 0x55]);
+    expect(sent[2]).toEqual([
+      0xbc, 0x0a, 0x02, 0x07,
+      0xff, 0x00, 0x00, 0xff, 0xa2, 0x00, 0xff, 0xff, 0x00,
+      0x00, 0xff, 0x00, 0x00, 0x00, 0xff, 0xff, 0x00, 0xff,
+      0xff, 0xff, 0xff, 0xaa, 0x55,
+    ]);
+    expect(sent[3]).toEqual([0xbc, 0x0a, 0x07, 0x32, 0x43, 0x55]);
+    expect(sent[4]).toEqual([0xbc, 0x00, 0x10, 0x64, 0x74, 0x55]);
     expect(sent.some(bytes => bytes[1] === 0x0f)).toBe(false);
+    expect(sent.some(bytes => bytes[1] === 0x02)).toBe(false);
+    expect(sent.some(bytes => bytes[1] === 0x11)).toBe(false);
   });
 });
 
-describe('saveEffectToDevice', () => {
+describe('sendEffectPalette / sendEffectSpeed / sendEffectBrightness', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     clearConnection();
@@ -143,42 +131,31 @@ describe('saveEffectToDevice', () => {
     clearConnection();
   });
 
-  test('8 distinct frames: 70 writes, count 8, indices 1-8, no Reset, no 0x0F', async () => {
-    const def = EFFECTS[0];
-    const frames = effectFrames(
-      def,
-      {palette: def.defaultPalette, brightness: 100, speed: 50},
-      8,
-      1,
-      false,
-    );
-    await saveEffectToDevice(frames);
+  test('palette update: mode + palette only, no re-select', async () => {
+    await sendEffectPalette([[255, 0, 0], [0, 0, 255]]);
     const sent: number[][] = writes.mock.calls.map(call => call[3] as number[]);
-    expect(sent).toHaveLength(70);
-    expect(sent[0]).toEqual([0xbc, 0x00, 0x11, 0xf1, 0x03, 0x55]);
-    expect(sent[1]).toEqual([0xbc, 0x02, 0xf1, 0x08, 0xfb, 0x55]);
-    for (let image = 1; image <= 8; image++) {
-      for (let b = 0; b < 8; b++) {
-        const chunk = sent[2 + (image - 1) * 8 + b];
-        expect(chunk[0]).toBe(0xbc);
-        expect(chunk[1]).toBe(0x02);
-        expect(chunk[2]).toBe(image);
-        expect(chunk[3]).toBe(b + 1);
-        expect(chunk).toHaveLength(102);
-        expect(chunk[101]).toBe(0x55);
-      }
-    }
-    expect(sent[66]).toEqual([0xbc, 0x02, 0x07, 0x3c, 0x45, 0x55]);
-    expect(sent[67]).toEqual([0xbc, 0x02, 0xf2, 0x08, 0xfc, 0x55]);
-    expect(sent[68]).toEqual([0xbc, 0x00, 0x11, 0xf2, 0x04, 0x55]);
-    expect(sent[69]).toEqual([0xbc, 0x00, 0x12, 0x12, 0x55]);
-    // The frames differ, so image 1's first chunk differs
-    // from image 2's: this is an animation, not 8 copies.
-    expect(sent[2]).not.toEqual(sent[10]);
-    const hex = sent
-      .map(bytes => bytes.map(b => b.toString(16).padStart(2, '0')).join(''))
-      .join(' ');
-    expect(hex).not.toContain('bc00151555');
-    expect(sent.some(bytes => bytes[1] === 0x0f)).toBe(false);
+    expect(sent).toHaveLength(2);
+    expect(sent[0]).toEqual([0xbc, 0x00, 0x0a, 0x0a, 0x55]);
+    // 0A+02+02 = 0E; +FF (red) = 10D; +FF (blue) = 20C -> 0C.
+    expect(sent[1]).toEqual([
+      0xbc, 0x0a, 0x02, 0x02, 0xff, 0x00, 0x00, 0x00, 0x00, 0xff, 0x0c, 0x55,
+    ]);
+    // No effect select: re-selecting on every palette
+    // drag could restart the animation.
+    expect(sent.some(bytes => bytes[1] === 0x0a && bytes[2] === 0x01)).toBe(false);
+  });
+
+  test('speed update: one write', async () => {
+    await sendEffectSpeed(81);
+    const sent: number[][] = writes.mock.calls.map(call => call[3] as number[]);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toEqual([0xbc, 0x0a, 0x07, 0x51, 0x62, 0x55]);
+  });
+
+  test('brightness update: one write', async () => {
+    await sendEffectBrightness(48);
+    const sent: number[][] = writes.mock.calls.map(call => call[3] as number[]);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toEqual([0xbc, 0x00, 0x10, 0x30, 0x40, 0x55]);
   });
 });

@@ -295,73 +295,102 @@ export function resetSavedPictureCommands(pixels: PixelGrid): number[][] {
 }
 
 // ---------------------------------------------------------------------------
-// Slideshow-indexed write (0x02 family, SpawnDev only) — UNPROVEN.
+// Mode protocol (PacketLogger, Nov 8-9, 2026) — the stock app's
+// Lamplight and Light effect commands. SUPERSEDES the 0x02
+// family that used to live here: the stock app never sends
+// 0x0F/0x02/0x11 for Mode features. Two traces (246 writes,
+// 3,574 writes) contain zero 0x0F, 0x02, or 0x11 commands.
+// The panel generates the animation itself from a palette
+// + effect number + speed + brightness; the app sends no
+// frames, and there is no slideshow to send.
 // ---------------------------------------------------------------------------
-// The plain save appends: the Nov 8, 2026 Lamp device test
-// proved each lamp colour becomes another slideshow image,
-// so the panel cycles all of them. The stock Lamplight tab
-// does not do that — one static colour, applied in about a
-// second, no disconnect — so it writes a slot, not an append.
-// SpawnDev's library is the only source for a slot write:
-//   BC 02 F1 <count> CRC 55   (slideshow image write enable)
-//   BC 02 <index> <chunk 1-8> + 96 RGB bytes + CRC 55
-//   BC 02 07 3C CRC 55         (marker, sent when index == count)
-//   BC 02 F2 <count> CRC 55   (slideshow image write disable)
-// and their save flow brackets the 0x02 writes with the 0x11
-// static-write enable/disable, after a Reset. The Lamp slot
-// test keeps the brackets, drops the Reset (Reset is what
-// drops the link and forces the reconnect scan), and writes
-// index 1 of a 1-image set: if count declares the set size,
-// each new colour replaces the set instead of appending.
-// Checksum rule here is SpawnDev's plain truncated sum of
-// the bytes after BC — the same rule as the proven stored
-// blocks. Device-proven Nov 8, 2026: the slot save's plain-sum
-// 0x02 writes were accepted (the colour appeared at the end
-// of the cycle), so the sum+1 variation is dead. Chunk
-// checksum: sum of 0x02 + index + chunk + 96 pixel bytes,
-// mod 256 (plain sum, like stored blocks).
-// Timings follow SpawnDev: 5 ms between 0x02 writes, 50 ms
-// after the 0x11 bracket commands.
+// Commands, all plain truncated-sum checksums (sum of the
+// bytes after BC, mod 256). Verified against the traces:
+// 219/219 live writes in the first trace, 3,556/3,574 in
+// the narrated trace — the only failures are a stale
+// preamble replay the panel tolerates (e.g. the 0A 01 04
+// with ck 0x00; the live select is ck 0x0F).
+//   BC 00 0B 0B 55                  lamp mode select
+//   BC 00 0A 0A 55                  effect mode select
+//   BC 0B <R> <G> <B> CK 55         solid lamp colour (one write)
+//   BC 0A 01 <n> CK 55              select effect n (1-7)
+//   BC 0A 02 <count> <RGBs> CK 55   palette (count 1-7)
+//   BC 0A 07 <speed> CK 55          speed percent (0-100)
+//   BC 00 10 <value> CK 55          brightness percent (0-100)
+// Brightness confirmed by the narrated video (Nov 9, 2026):
+// the 00 10 values match the brightness slider at the
+// synced times (28~29%, 76~77%, 80~81%, 38~39% in
+// Lamplight; 39, 77, 48 in Light effect). Speed confirmed
+// the same way (0A 07 values 52, 80, 81, 43 match the
+// speed slider). The sun/moon row sends no distinct
+// command; the heart favourite is app-side only.
 
-/** Slideshow image write enable: BC 02 F1 <count> CRC 55. */
-export function slideShowImageWriteEnableCommand(count: number): number[] {
-  const c = clampByte(count, 'count');
-  return [0xbc, 0x02, 0xf1, c, (0x02 + 0xf1 + c) % 256, 0x55];
+/** Lamp mode select: BC 00 0B 0B 55. */
+export function lampModeCommand(): number[] {
+  return [0xbc, 0x00, 0x0b, 0x0b, 0x55];
 }
 
-/** Slideshow image write disable: BC 02 F2 <count> CRC 55. */
-export function slideShowImageWriteDisableCommand(count: number): number[] {
-  const c = clampByte(count, 'count');
-  return [0xbc, 0x02, 0xf2, c, (0x02 + 0xf2 + c) % 256, 0x55];
-}
-
-/** Slideshow marker: BC 02 07 3C 45 55. */
-export function slideShowMarkerCommand(): number[] {
-  return [0xbc, 0x02, 0x07, 0x3c, 0x45, 0x55];
+/** Effect mode select: BC 00 0A 0A 55. */
+export function effectModeCommand(): number[] {
+  return [0xbc, 0x00, 0x0a, 0x0a, 0x55];
 }
 
 /**
- * One slideshow-image chunk (102 bytes): BC 02 <index> <chunk 1-8>
- * + 96 RGB bytes + checksum + 55. Each chunk covers 32 pixels =
- * 2 rows, same split as the live and stored blocks.
+ * Solid lamp colour: BC 0B <R> <G> <B> CK 55, plain-sum
+ * checksum. One 7-byte write — the whole lamp save.
+ * Red: 0B+FF = 0A, matching the trace's BC 0B FF 00 00
+ * 0A 55.
  */
-export function slideShowImageWriteChunkCommand(
-  imageIndex: number,
-  chunkIndex: number,
-  blockPixels: readonly RGB[],
+export function solidColourCommand(
+  r: number,
+  g: number,
+  b: number,
 ): number[] {
-  if (!Number.isInteger(chunkIndex) || chunkIndex < 1 || chunkIndex > 8) {
-    throw new Error(`chunkIndex must be 1-8, got ${chunkIndex}`);
+  const rr = clampByte(r, 'r');
+  const gg = clampByte(g, 'g');
+  const bb = clampByte(b, 'b');
+  return [0xbc, 0x0b, rr, gg, bb, (0x0b + rr + gg + bb) % 256, 0x55];
+}
+
+/**
+ * Select effect n (1-7): BC 0A 01 <n> CK 55, plain-sum
+ * checksum. Effect 1: 0A+01+01 = 0C; effect 4: 0F;
+ * effect 7: 12 — all matching the narrated trace's
+ * live selects. (The preamble's 0A 01 04 with ck 0x00
+ * is a stale replay, not the live value.)
+ */
+export function effectSelectCommand(effectNumber: number): number[] {
+  if (!Number.isInteger(effectNumber) || effectNumber < 1 || effectNumber > 7) {
+    throw new Error(`effectNumber must be 1-7, got ${effectNumber}`);
   }
-  if (blockPixels.length !== BLOCK_PIXEL_COUNT) {
+  return [
+    0xbc,
+    0x0a,
+    0x01,
+    effectNumber,
+    (0x0a + 0x01 + effectNumber) % 256,
+    0x55,
+  ];
+}
+
+/**
+ * Palette: BC 0A 02 <count> <count RGB triples> CK 55,
+ * plain-sum checksum. The stock app sends a fresh
+ * palette on every small drag movement (3,399 distinct
+ * palettes in the narrated trace), so this is the
+ * live-update write. Rainbow's 7-colour palette
+ * (red, orange, yellow, green, blue, magenta, white)
+ * checksums to 0xAA, matching the trace.
+ */
+export function paletteCommand(palette: readonly RGB[]): number[] {
+  if (palette.length < 1 || palette.length > 7) {
     throw new Error(
-      `blockPixels must contain exactly 32 pixels, got ${blockPixels.length}`,
+      `palette must contain 1-7 colours, got ${palette.length}`,
     );
   }
-  const index = clampByte(imageIndex, 'imageIndex');
-  const out: number[] = [0xbc, 0x02, index, chunkIndex];
-  let sum = 0x02 + index + chunkIndex;
-  for (const [r, g, b] of blockPixels) {
+  const out: number[] = [0xbc, 0x0a, 0x02, palette.length];
+  let sum = 0x0a + 0x02 + palette.length;
+  for (const [r, g, b] of palette) {
     out.push(clampByte(r, 'r'), clampByte(g, 'g'), clampByte(b, 'b'));
     sum += clampByte(r, 'r') + clampByte(g, 'g') + clampByte(b, 'b');
   }
@@ -370,128 +399,20 @@ export function slideShowImageWriteChunkCommand(
 }
 
 /**
- * The Lamp slot-save sequence (14 commands): 0x11 enable,
- * 0x02 enable(1), 8 chunks of image index 1, marker,
- * 0x02 disable(1), 0x11 disable, slideshow mode. No Reset.
+ * Speed: BC 0A 07 <speed> CK 55, plain-sum checksum.
+ * Speed 50: 0A+07+32 = 43, matching the trace.
  */
-export function lampSlotSaveCommands(pixels: PixelGrid): number[][] {
-  if (pixels.length !== PIXEL_COUNT) {
-    throw new Error(
-      `pixels must contain exactly 256 RGB tuples, got ${pixels.length}`,
-    );
-  }
-  const commands: number[][] = [
-    saveOpenCommand(),
-    slideShowImageWriteEnableCommand(1),
-  ];
-  for (let block = 0; block < BLOCK_COUNT; block++) {
-    commands.push(
-      slideShowImageWriteChunkCommand(
-        1,
-        block + 1,
-        pixels.slice(block * 32, block * 32 + 32),
-      ),
-    );
-  }
-  commands.push(
-    slideShowMarkerCommand(),
-    slideShowImageWriteDisableCommand(1),
-    saveCloseCommand(),
-    slideshowCommand(),
-  );
-  return commands;
+export function speedCommand(speed: number): number[] {
+  const s = clampByte(speed, 'speed');
+  return [0xbc, 0x0a, 0x07, s, (0x0a + 0x07 + s) % 256, 0x55];
 }
 
 /**
- * The Lamp all-slots sequence (70 commands): the same colour
- * written to all 8 slots, count 8, indices 1-8. The slot save
- * proved a count-1 write appends — the colour appeared at the
- * end of the cycle — so a single slot cannot make the panel
- * static. SpawnDev's own save flow always writes exactly 8
- * images, count 8, indices 1-8, after a Reset; this is that
- * transfer without the Reset. If a full 8-image transfer
- * defines the set, the whole cycle is one colour and reads
- * as static. If it appends instead, the cycle still shows
- * old images and the lamp mechanism is something else
- * entirely — a live send, or a dedicated command only a
- * capture of the stock app will show.
+ * Brightness: BC 00 10 <value> CK 55, plain-sum
+ * checksum. Value 28: 10+1C = 2C; value 80: 10+50
+ * = 60 — both matching the trace.
  */
-export function lampAllSlotsCommands(pixels: PixelGrid): number[][] {
-  if (pixels.length !== PIXEL_COUNT) {
-    throw new Error(
-      `pixels must contain exactly 256 RGB tuples, got ${pixels.length}`,
-    );
-  }
-  const commands: number[][] = [
-    saveOpenCommand(),
-    slideShowImageWriteEnableCommand(8),
-  ];
-  for (let image = 1; image <= 8; image++) {
-    for (let block = 0; block < BLOCK_COUNT; block++) {
-      commands.push(
-        slideShowImageWriteChunkCommand(
-          image,
-          block + 1,
-          pixels.slice(block * 32, block * 32 + 32),
-        ),
-      );
-    }
-  }
-  commands.push(
-    slideShowMarkerCommand(),
-    slideShowImageWriteDisableCommand(8),
-    saveCloseCommand(),
-    slideshowCommand(),
-  );
-  return commands;
-}
-
-/**
- * The Light effect save sequence (70 commands): the same
- * shape as the lamp all-slots save — 0x11 enable, 0x02
- * enable(8), 8 images of 8 chunks, marker, 0x02
- * disable(8), 0x11 disable, slideshow mode — but each
- * slot holds a different frame, so the panel cycles
- * them as an animation. The panel cycles at about 1s
- * per frame (effect 1's loop measured 8s for 8 frames
- * on device video, Nov 8, 2026), so 8 frames is one
- * loop. No Reset: the lamp all-slots save proved the
- * full 8-image transfer defines the set.
- */
-export function effectSaveCommands(frames: readonly PixelGrid[]): number[][] {
-  if (frames.length !== 8) {
-    throw new Error(
-      `frames must contain exactly 8 grids, got ${frames.length}`,
-    );
-  }
-  for (const pixels of frames) {
-    if (pixels.length !== PIXEL_COUNT) {
-      throw new Error(
-        `each frame must contain exactly 256 RGB tuples, got ${pixels.length}`,
-      );
-    }
-  }
-  const commands: number[][] = [
-    saveOpenCommand(),
-    slideShowImageWriteEnableCommand(8),
-  ];
-  for (let image = 1; image <= 8; image++) {
-    const pixels = frames[image - 1];
-    for (let block = 0; block < BLOCK_COUNT; block++) {
-      commands.push(
-        slideShowImageWriteChunkCommand(
-          image,
-          block + 1,
-          pixels.slice(block * 32, block * 32 + 32),
-        ),
-      );
-    }
-  }
-  commands.push(
-    slideShowMarkerCommand(),
-    slideShowImageWriteDisableCommand(8),
-    saveCloseCommand(),
-    slideshowCommand(),
-  );
-  return commands;
+export function brightnessCommand(value: number): number[] {
+  const v = clampByte(value, 'brightness');
+  return [0xbc, 0x00, 0x10, v, (0x00 + 0x10 + v) % 256, 0x55];
 }

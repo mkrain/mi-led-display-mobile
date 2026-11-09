@@ -26,14 +26,19 @@ import {
   DEVICE_NAME,
   SERVICE_UUID,
   type PixelGrid,
-  effectSaveCommands,
+  type RGB,
+  brightnessCommand,
+  effectModeCommand,
+  effectSelectCommand,
   fullPictureCommands,
-  lampAllSlotsCommands,
-  lampSlotSaveCommands,
+  lampModeCommand,
+  paletteCommand,
   resetCommand,
   resetSavedPictureCommands,
   savedPictureCommands,
   slideshowCommand,
+  solidColourCommand,
+  speedCommand,
 } from './protocol';
 import {
   clearConnection,
@@ -532,76 +537,84 @@ export async function saveStaticPictureToDevice(
 }
 
 /**
- * Lamp slot save (Nov 8, 2026): writes one solid colour as
- * image index 1 of a 1-image set, via the 0x02 indexed-write
- * family (lampSlotSaveCommands in protocol.ts). Hypothesis
- * test, not a proven path: the plain save appends, so a lamp
- * colour must overwrite a slot to stay a single static
- * image. No Reset, so the link never drops. Timings follow
- * SpawnDev: 50 ms after the 0x11 bracket commands, 5 ms
- * between the 0x02 writes.
+ * Mode protocol (PacketLogger, Nov 8-9, 2026) — the stock
+ * app's Lamplight and Light effect writes. SUPERSEDES the
+ * 0x02 slot/all-slots/effect saves that used to live here:
+ * the stock app never sends 0x0F/0x02/0x11 for Mode
+ * features, and the 70-write saves are gone. The panel
+ * generates the animation itself from a palette + effect
+ * number + speed + brightness, so Mode writes are a few
+ * tiny commands, not a slideshow.
+ *
+ * Lamp: lamp mode select, one solid-colour write, one
+ * brightness write. The colour is sent UNSCALED — the
+ * brightness is a separate panel parameter (00 10),
+ * not RGB scaling. The preview still shows the scaled
+ * colour, so it looks like the panel; the panel gets
+ * the raw colour plus the brightness value.
+ *
+ * Effect: effect mode select, effect select (1-7),
+ * palette, speed, brightness. Selecting an effect
+ * sends the full sequence; a palette/speed/brightness
+ * change afterwards sends only that parameter (with
+ * the mode select for the palette, so a stray lamp
+ * mode cannot swallow it). The stock app sends a
+ * fresh palette on every drag movement; this app
+ * debounces drags in the UI and sends the latest.
  */
-export async function saveLampColor(pixels: PixelGrid): Promise<void> {
-  await saveLampCommands(lampSlotSaveCommands(pixels));
-}
-
-/**
- * Lamp all-slots save (Nov 8, 2026): the same colour in all
- * 8 slots, count 8. The slot save proved a count-1 write
- * appends — the colour appeared at the end of the cycle —
- * so this tests whether a full 8-image transfer defines
- * the set. No Reset, so the link never drops.
- */
-export async function saveLampColorAllSlots(
-  pixels: PixelGrid,
+export async function sendLampColour(
+  color: RGB,
+  brightness: number,
 ): Promise<void> {
-  await saveLampCommands(lampAllSlotsCommands(pixels));
+  await writeCommand(lampModeCommand());
+  await sleep(2);
+  await writeCommand(solidColourCommand(color[0], color[1], color[2]));
+  await sleep(2);
+  await writeCommand(brightnessCommand(brightness));
+  await sleep(2);
 }
 
-/**
- * Light effect save (Nov 8, 2026): 8 different frames,
- * one per slot, same 70-command shape and same proven
- * pacing as the lamp all-slots save. The panel cycles
- * the 8 frames at about 1s each, so this is the stored
- * animation the stock app's Light effect plays with
- * the app closed. No Reset, so the link never drops.
- */
-export async function saveEffectToDevice(
-  frames: readonly PixelGrid[],
+/** Select an effect and send its full state at once. */
+export async function selectEffect(
+  effectNumber: number,
+  palette: readonly RGB[],
+  speed: number,
+  brightness: number,
 ): Promise<void> {
-  await saveLampCommands(effectSaveCommands(frames));
+  await writeCommand(effectModeCommand());
+  await sleep(2);
+  await writeCommand(effectSelectCommand(effectNumber));
+  await sleep(2);
+  await writeCommand(paletteCommand(palette));
+  await sleep(2);
+  await writeCommand(speedCommand(speed));
+  await sleep(2);
+  await writeCommand(brightnessCommand(brightness));
+  await sleep(2);
 }
 
-/**
- * Write a Lamp 0x02 sequence: 50 ms after the 0x11 bracket
- * commands (first and second-to-last), 5 ms between the
- * 0x02 writes, 2 ms after the trailing slideshow mode.
- * This is the proven pacing (Nov 8, 2026, all-slots
- * build): the colour lands static. Two faster variants
- * both failed on device — back-to-back writes with
- * 2 ms brackets showed no colour at all, and 50 ms
- * brackets with back-to-back chunks also showed no
- * colour — and worse, the failed sequences wedge the
- * panel: live Draw/Photo sends stop working until a
- * full slideshow save resets it. So an interrupted or
- * too-fast 0x02 sequence leaves the panel stuck in
- * write mode. Do not shorten these gaps without a
- * device test from a known-good panel state, and
- * note whether the panel was recovered (slideshow
- * send) between tests: a wedge from an earlier run
- * confounds the next run's result.
- */
-async function saveLampCommands(commands: number[][]): Promise<void> {
-  for (let i = 0; i < commands.length; i++) {
-    await writeCommand(commands[i]);
-    if (i === 0 || i === commands.length - 2) {
-      await sleep(50);
-    } else if (i === commands.length - 1) {
-      await sleep(2);
-    } else {
-      await sleep(5);
-    }
-  }
+/** Send a new palette for the current effect. */
+export async function sendEffectPalette(
+  palette: readonly RGB[],
+): Promise<void> {
+  await writeCommand(effectModeCommand());
+  await sleep(2);
+  await writeCommand(paletteCommand(palette));
+  await sleep(2);
+}
+
+/** Send a new speed for the current effect. */
+export async function sendEffectSpeed(speed: number): Promise<void> {
+  await writeCommand(speedCommand(speed));
+  await sleep(2);
+}
+
+/** Send a new brightness for the current effect. */
+export async function sendEffectBrightness(
+  brightness: number,
+): Promise<void> {
+  await writeCommand(brightnessCommand(brightness));
+  await sleep(2);
 }
 
 /**
