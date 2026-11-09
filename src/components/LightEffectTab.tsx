@@ -416,6 +416,9 @@ export function LightEffectTab() {
                 setSelectedPaletteIndex(i);
                 setColor(displayPalette[i]);
               }}
+              // Widen the tap area without widening the
+              // dot, so the row still fits on one line.
+              hitSlop={{top: 4, bottom: 4, left: 4, right: 4}}
               style={[
                 styles.paletteDot,
                 {backgroundColor: rgbToCss(c)},
@@ -431,6 +434,7 @@ export function LightEffectTab() {
             accessibilityLabel="Add colour"
             onPress={addColour}
             disabled={palette.length >= MAX_PALETTE_COLORS}
+            hitSlop={{top: 4, bottom: 4, left: 4, right: 4}}
             style={[
               styles.paletteButton,
               palette.length >= MAX_PALETTE_COLORS
@@ -443,6 +447,7 @@ export function LightEffectTab() {
           <TouchableOpacity
             accessibilityLabel="Remove colour"
             onPress={removeColour}
+            hitSlop={{top: 4, bottom: 4, left: 4, right: 4}}
             style={styles.paletteButton}
           >
             <Text style={styles.paletteButtonLabel}>🗑️</Text>
@@ -523,24 +528,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  // Palette dots and buttons are 44pt, the minimum
-  // comfortable touch target (Nov 9, 2026): at 36pt
-  // they were hard to select. The dots wrap inside
-  // their container when the palette is full, and the
-  // + and trash stay pinned to the right.
+  // Palette dots and buttons are 36pt (Nov 9, 2026):
+  // 44pt spilled the row into two lines, so the
+  // smaller size stays and the tap area is widened
+  // with hitSlop instead — the dots fit on one row
+  // and are still easy to hit.
   paletteDot: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     marginHorizontal: 4,
     borderWidth: 1,
     borderColor: '#999',
   },
   paletteDotSelected: {borderWidth: 3, borderColor: '#000'},
   paletteButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#888',
     marginHorizontal: 4,
     alignItems: 'center',
