@@ -13,11 +13,16 @@ import {
 import {PixelGrid} from '../components/PixelGrid';
 import {BottomMenu} from '../components/BottomMenu';
 import {useSlideshowState} from '../state/SlideshowState';
+import {useConnectionState} from '../state/ConnectionState';
 import {useDrawState} from '../state/DrawState';
 import {StackActions, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '../../App';
-import {saveSlideshowReplace} from '../ble/device';
+import {
+  saveSlideshowReplace,
+  sendTestBrightness,
+  sendTestSpeed,
+} from '../ble/device';
 import {ShareImageButton} from '../components/ShareImageButton';
 import {shareSpriteSheet} from '../export/shareSlideshowItem';
 import {decodePickedImage} from '../export/decodeImage';
@@ -74,6 +79,48 @@ export function SlideshowScreen() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
+  const {connection} = useConnectionState();
+  // Panel test (Nov 9, 2026): one brightness or speed
+  // command at a time, while a slideshow is playing.
+  const [testing, setTesting] = useState(false);
+  const [testStatus, setTestStatus] = useState<string | null>(null);
+
+  async function sendPanelTest(
+    kind: 'brightness' | 'speed',
+    value: number,
+  ) {
+    if (testing) {
+      return;
+    }
+    if (!connection) {
+      setTestStatus('Not connected — connect on the Connect tab first.');
+      return;
+    }
+    setTesting(true);
+    try {
+      if (kind === 'brightness') {
+        await sendTestBrightness(value);
+        setTestStatus(
+          `Sent brightness ${value}% — watch the panel. ` +
+            'If it dims, brightness is global; if nothing ' +
+            'changes, it is Mode-only.',
+        );
+      } else {
+        await sendTestSpeed(value);
+        setTestStatus(
+          `Sent speed ${value}% — watch the panel. ` +
+            'If the cycle speeds up (or slows down at 10%), ' +
+            'speed is global; if nothing changes, it is Mode-only.',
+        );
+      }
+    } catch (e) {
+      setTestStatus(
+        `Test send failed: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    } finally {
+      setTesting(false);
+    }
+  }
   // Sprite-sheet share, one button per slideshow row
   // (Nov 7, 2026): sharing a sheet for one slideshow
   // while another is sharing would write the same cache
@@ -616,6 +663,57 @@ export function SlideshowScreen() {
             />
           </View>
         ) : null}
+        {/* Panel test (Nov 9, 2026): do the Mode tab's
+            brightness and speed commands also affect a
+            playing slideshow? Save a slideshow first so
+            the panel is cycling, then tap a button and
+            watch the panel. Each button sends one command
+            — the same bytes the Mode tab sends. The
+            panel's reaction (or lack of one) is the test
+            result; report it and the buttons can go away. */}
+        <Text style={styles.sectionHeader}>
+          Panel test — brightness & speed
+        </Text>
+        <Text style={styles.note}>
+          Save a slideshow first so the panel is cycling.
+          Brightness 20% should dim it if brightness is
+          global; Speed 100% should cycle it faster (and
+          Speed 10% slower) if speed is global. If nothing
+          changes, that command is Mode-only.
+        </Text>
+        <View style={styles.testRow}>
+          <View style={styles.testButton}>
+            <Button
+              title="Brightness 20%"
+              onPress={() => sendPanelTest('brightness', 20)}
+              disabled={testing || !connection}
+            />
+          </View>
+          <View style={styles.testButton}>
+            <Button
+              title="Brightness 100%"
+              onPress={() => sendPanelTest('brightness', 100)}
+              disabled={testing || !connection}
+            />
+          </View>
+        </View>
+        <View style={styles.testRow}>
+          <View style={styles.testButton}>
+            <Button
+              title="Speed 10%"
+              onPress={() => sendPanelTest('speed', 10)}
+              disabled={testing || !connection}
+            />
+          </View>
+          <View style={styles.testButton}>
+            <Button
+              title="Speed 100%"
+              onPress={() => sendPanelTest('speed', 100)}
+              disabled={testing || !connection}
+            />
+          </View>
+        </View>
+        {testStatus ? <Text style={styles.note}>{testStatus}</Text> : null}
       </ScrollView>
       <BottomMenu />
     </View>
@@ -681,6 +779,13 @@ const styles = StyleSheet.create({
   ctrlDisabled: {color: '#ccc'},
   ctrlDelete: {color: '#ff3b30'},
   button: {marginVertical: 4, width: '100%'},
+  testRow: {
+    flexDirection: 'row',
+    gap: 8,
+    width: '100%',
+    marginVertical: 4,
+  },
+  testButton: {flex: 1},
   note: {marginTop: 8, color: '#555', textAlign: 'center'},
   modalBackdrop: {flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 24},
   modalCard: {backgroundColor: '#fff', borderRadius: 16, padding: 16},

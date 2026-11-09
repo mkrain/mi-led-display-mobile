@@ -618,6 +618,25 @@ export async function sendEffectBrightness(
 }
 
 /**
+ * Test writes (Nov 9, 2026): send one raw brightness or
+ * speed command — the same bytes the Mode tab sends — to
+ * test whether they are global panel settings or Mode-only.
+ * The Slideshow screen's test buttons call these while a
+ * slideshow is playing; the panel's reaction (or lack of
+ * one) is the result. Brightness 20% should visibly dim a
+ * playing slideshow if brightness is global; speed 100%
+ * should cycle it faster (and 10% slower) if speed is.
+ */
+export async function sendTestBrightness(value: number): Promise<void> {
+  await sendEffectBrightness(value);
+}
+
+/** Test write: one raw speed command (see sendTestBrightness). */
+export async function sendTestSpeed(value: number): Promise<void> {
+  await sendEffectSpeed(value);
+}
+
+/**
  * DESTRUCTIVE TEST, Oct 30, 2026: send ONLY the Reset command
  * (BC 00 15 15 55), with no save in the same burst. This is the
  * control the Reset+Save burst lacks: the manual Reset →

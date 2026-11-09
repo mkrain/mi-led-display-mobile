@@ -6,6 +6,8 @@ import {
   sendEffectPalette,
   sendEffectSpeed,
   sendLampColour,
+  sendTestBrightness,
+  sendTestSpeed,
   saveStaticPictureToDevice,
 } from '../ble/device';
 import {solidGrid} from '../lamp/lamp';
@@ -157,5 +159,31 @@ describe('sendEffectPalette / sendEffectSpeed / sendEffectBrightness', () => {
     const sent: number[][] = writes.mock.calls.map(call => call[3] as number[]);
     expect(sent).toHaveLength(1);
     expect(sent[0]).toEqual([0xbc, 0x00, 0x10, 0x30, 0x40, 0x55]);
+  });
+});
+
+describe('sendTestBrightness / sendTestSpeed', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    clearConnection();
+    setConnection({id: 'abc', name: 'MI Matrix Display', mtu: 512});
+  });
+
+  afterEach(() => {
+    clearConnection();
+  });
+
+  test('test brightness: one raw 00 10 write', async () => {
+    await sendTestBrightness(20);
+    const sent: number[][] = writes.mock.calls.map(call => call[3] as number[]);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toEqual([0xbc, 0x00, 0x10, 0x14, 0x24, 0x55]);
+  });
+
+  test('test speed: one raw 0A 07 write', async () => {
+    await sendTestSpeed(100);
+    const sent: number[][] = writes.mock.calls.map(call => call[3] as number[]);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toEqual([0xbc, 0x0a, 0x07, 0x64, 0x75, 0x55]);
   });
 });
