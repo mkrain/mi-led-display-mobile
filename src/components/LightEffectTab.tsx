@@ -10,7 +10,12 @@ import {
 import Slider from '@react-native-community/slider';
 import {PixelGrid, rgbToCss} from '../components/PixelGrid';
 import {ColorPad} from '../components/ColorPad';
-import {saveEffectToDevice} from '../ble/device';
+import {
+  selectEffect,
+  sendEffectBrightness,
+  sendEffectPalette,
+  sendEffectSpeed,
+} from '../ble/device';
 import {useConnectionState} from '../state/ConnectionState';
 import {useEffectState} from '../state/EffectState';
 import {
@@ -21,6 +26,7 @@ import {
   effectivePalette,
   nextEffectIndex,
   prevEffectIndex,
+  sendPalette,
   speedFactor,
 } from '../effects/effects';
 import type {RGB} from '../conversion/convert';
@@ -28,18 +34,38 @@ import type {RGB} from '../conversion/convert';
 /**
  * Light effect subtab of the Mode screen (Nov 8, 2026):
  * the stock app's 7 swipeable effect presets, with a
- * live preview, the hue strip and palette, brightness
- * and speed sliders, a rotate control, a reverse
- * toggle, and a Save that writes the 8 frames to the
- * panel as a cycling slideshow.
+ * live preview, the hue strip and palette, and
+ * brightness and speed sliders.
  *
- * The preview shows the grid as the stock preview
- * does — unrotated, in preview orientation. Rotation
- * is a send-time transform only, so the preview does
- * not rotate; it does show reverse, since that is the
- * frame order the panel will play. The preview cycles
- * at the panel's rate (1 frame per second at 50%
- * speed), so what you see is what the panel plays.
+ * The stock app sends no frames (PacketLogger, Nov 8-9,
+ * 2026): it sends effect mode (00 0A), an effect select
+ * (0A 01, 1-7), a palette (0A 02), a speed (0A 07), and
+ * a brightness (00 10), and the panel generates the
+ * animation itself. This tab does the same. Picking an
+ * effect sends the full sequence; a palette, speed, or
+ * brightness change afterwards sends only that
+ * parameter. Sends are debounced 300 ms, so dragging
+ * a slider or the hue strip does not flood the panel —
+ * the stock app sends a fresh palette on every drag
+ * movement, but a short debounce is the same result
+ * with fewer writes. Nothing sends on mount, and
+ * nothing sends while disconnected.
+ *
+ * The preview is a presentation aid, not the panel's
+ * pixels: it shows the effect's look (the same
+ * generators the pre-trace build used for frames),
+ * cycling at the panel's rate. For the random effects
+ * (confetti, speckles) the preview re-randomizes
+ * locally — the panel re-randomizes on its own, so
+ * the preview and the panel never match cell for
+ * cell. The preview shows the pattern and the
+ * colours, not the exact arrangement.
+ *
+ * There is no rotate or reverse control: those were
+ * for the frame-based save, and the panel generates
+ * its own animation — there is no rotate or reverse
+ * command in the traces. The preview shows the
+ * effect in the stock app's preview orientation.
  *
  * The palette is the effect's colour set. The hue
  * strip sets a working colour only — it never
@@ -49,10 +75,9 @@ import type {RGB} from '../conversion/convert';
  * the pad stays live. Tapping a dot selects it, +
  * appends the working colour as a new dot, and the
  * trash removes the selected entry (never the last
- * one). Saving writes the shown palette and commits
- * it. Selection is by index, so duplicate colours in
- * the palette are handled. A new preset brings its
- * own default palette.
+ * one). The send uses the shown palette, so what
+ * you see is what the panel gets. A new preset
+ * brings its own default palette.
  *
  * The preview is a swipe target: swiping it left or
  * right changes the effect, wrapping at the ends
@@ -61,14 +86,7 @@ import type {RGB} from '../conversion/convert';
  * claim the touch, so vertical drags still scroll
  * the page. The dots below do the same by tapping.
  *
- * Save is explicit, not automatic: an effect save is
- * 70 writes at the proven pacing, about a second, and
- * the user will be scrubbing sliders. Nothing saves
- * while disconnected, and the button is disabled
- * while a save runs.
- *
- * Not in this pass: the heart favourites, and
- * auto-save on change.
+ * Not in this pass: the heart favourites.
  */
 export function LightEffectTab() {
   const {
@@ -84,35 +102,34 @@ export function LightEffectTab() {
     setBrightness,
     speed,
     setSpeed,
-    rotation,
-    setRotation,
-    reverse,
-    setReverse,
   } = useEffectState();
   const {connection} = useConnectionState();
   const [status, setStatus] = useState(
-    'Pick an effect. Save writes it to the panel as a looping animation.',
+    'Pick an effect. It sends to the panel on its own.',
   );
   const [frameIndex, setFrameIndex] = useState(0);
   const [scrollEnabled, setScrollEnabled] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const savingRef = useRef(false);
 
   const def = EFFECTS[effectIndex];
 
   // The palette as shown: the committed palette with
   // the selected entry replaced by the working colour.
-  // The preview, the palette row, and the save all use
+  // The preview, the palette row, and the send all use
   // this, so what you see is what the panel gets.
   const displayPalette = effectivePalette(
     palette,
     selectedPaletteIndex,
     color,
   );
+  // The palette as sent (rainbow appends its fixed
+  // white step). Keyed as a string so the send effect
+  // below only fires when the sent values change, not
+  // on every render.
+  const sendKey = JSON.stringify(sendPalette(def, displayPalette));
 
   // The preview frames: preview orientation, no
-  // rotation, reverse applied so the preview shows
-  // the motion the panel will play.
+  // rotation, no reverse — the panel generates its
+  // own animation, so the preview only shows the look.
   const previewFrames = useMemo(
     () =>
       effectFrames(
@@ -120,9 +137,9 @@ export function LightEffectTab() {
         {palette: displayPalette, brightness, speed},
         EFFECT_FRAME_COUNT,
         0,
-        reverse,
+        false,
       ),
-    [def, displayPalette, brightness, speed, reverse],
+    [def, displayPalette, brightness, speed],
   );
 
   // Advance the preview at the panel's rate: one
@@ -140,9 +157,132 @@ export function LightEffectTab() {
       1000 / speedFactor(speed),
     );
     return () => clearInterval(interval);
-  }, [speed, effectIndex, displayPalette, brightness, reverse]);
+  }, [speed, effectIndex, displayPalette, brightness]);
 
   const preview = previewFrames[frameIndex] ?? previewFrames[0];
+
+  // Latest values for the debounced send, which runs
+  // after the render that scheduled it.
+  const effectIndexRef = useRef(effectIndex);
+  const displayPaletteRef = useRef(displayPalette);
+  const speedRef = useRef(speed);
+  const brightnessRef = useRef(brightness);
+  const defRef = useRef(def);
+  const connectionRef = useRef(connection);
+  effectIndexRef.current = effectIndex;
+  displayPaletteRef.current = displayPalette;
+  speedRef.current = speed;
+  brightnessRef.current = brightness;
+  defRef.current = def;
+  connectionRef.current = connection;
+  // What the panel last received, so a send only
+  // writes what changed. Null until the first send.
+  const lastSentRef = useRef<{
+    effectIndex: number;
+    paletteKey: string;
+    speed: number;
+    brightness: number;
+  } | null>(null);
+  const sendingRef = useRef(false);
+  const pendingRef = useRef(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(false);
+
+  async function attemptSend() {
+    if (sendingRef.current) {
+      pendingRef.current = true;
+      return;
+    }
+    if (!connectionRef.current) {
+      setStatus('Not connected — connect on the Connect tab first.');
+      return;
+    }
+    const last = lastSentRef.current;
+    const paletteKey = JSON.stringify(
+      sendPalette(defRef.current, displayPaletteRef.current),
+    );
+    const effectChanged =
+      last === null || last.effectIndex !== effectIndexRef.current;
+    const paletteChanged = last === null || last.paletteKey !== paletteKey;
+    const speedChanged = last === null || last.speed !== speedRef.current;
+    const brightnessChanged =
+      last === null || last.brightness !== brightnessRef.current;
+    if (
+      !effectChanged &&
+      !paletteChanged &&
+      !speedChanged &&
+      !brightnessChanged
+    ) {
+      return;
+    }
+    sendingRef.current = true;
+    setStatus('Sending to panel…');
+    try {
+      if (effectChanged) {
+        // A new effect gets the full sequence: mode,
+        // select, palette, speed, brightness.
+        await selectEffect(
+          effectIndexRef.current + 1,
+          sendPalette(defRef.current, displayPaletteRef.current),
+          speedRef.current,
+          brightnessRef.current,
+        );
+      } else {
+        // Otherwise only the changed parameters, so a
+        // palette drag does not re-select the effect
+        // (and restart its animation).
+        if (paletteChanged) {
+          await sendEffectPalette(
+            sendPalette(defRef.current, displayPaletteRef.current),
+          );
+        }
+        if (speedChanged) {
+          await sendEffectSpeed(speedRef.current);
+        }
+        if (brightnessChanged) {
+          await sendEffectBrightness(brightnessRef.current);
+        }
+      }
+      lastSentRef.current = {
+        effectIndex: effectIndexRef.current,
+        paletteKey,
+        speed: speedRef.current,
+        brightness: brightnessRef.current,
+      };
+      setStatus('Effect sent — the panel plays it.');
+    } catch (e) {
+      setStatus(
+        `Send failed: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    } finally {
+      sendingRef.current = false;
+      if (pendingRef.current) {
+        pendingRef.current = false;
+        attemptSend().catch(() => undefined);
+      }
+    }
+  }
+
+  useEffect(() => {
+    // Nothing sends on mount: the panel keeps its own
+    // last effect, and there is no change to send.
+    if (!mountedRef.current) {
+      mountedRef.current = true;
+      return;
+    }
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+    }
+    timerRef.current = setTimeout(() => {
+      attemptSend().catch(() => undefined);
+    }, 300);
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectIndex, sendKey, speed, brightness]);
 
   // Swipe the preview to change effect, wrapping at the
   // ends. Created fresh each render so the release handler
@@ -201,41 +341,6 @@ export function LightEffectTab() {
     setPalette(nextPalette);
     setSelectedPaletteIndex(nextIndex);
     setColor(nextPalette[nextIndex]);
-  }
-
-  async function save() {
-    if (savingRef.current) {
-      return;
-    }
-    if (!connection) {
-      setStatus('Not connected — connect on the Connect tab first.');
-      return;
-    }
-    savingRef.current = true;
-    setSaving(true);
-    setStatus('Saving effect…');
-    try {
-      const frames = effectFrames(
-        def,
-        {palette: displayPalette, brightness, speed},
-        EFFECT_FRAME_COUNT,
-        rotation,
-        reverse,
-      );
-      await saveEffectToDevice(frames);
-      // Commit the shown palette: the panel now holds
-      // it, so the app's palette matches what was
-      // saved instead of the pre-pad version.
-      setPalette(displayPalette);
-      setStatus('Effect saved — the panel plays it on a loop.');
-    } catch (e) {
-      setStatus(
-        `Save failed: ${e instanceof Error ? e.message : String(e)}`,
-      );
-    } finally {
-      savingRef.current = false;
-      setSaving(false);
-    }
   }
 
   return (
@@ -343,75 +448,11 @@ export function LightEffectTab() {
         />
         <Text style={styles.sliderValue}>{speed}%</Text>
       </View>
-      <View style={styles.controlRow}>
-        <Text style={styles.controlLabel}>Rotate</Text>
-        {[0, 1, 2, 3].map(q => (
-          <TouchableOpacity
-            key={q}
-            accessibilityLabel={`Rotate ${q * 90} degrees`}
-            onPress={() => setRotation(q)}
-            style={[
-              styles.choice,
-              rotation === q ? styles.choiceSelected : undefined,
-            ]}
-          >
-            <Text
-              style={[
-                styles.choiceLabel,
-                rotation === q ? styles.choiceLabelSelected : undefined,
-              ]}
-            >
-              {q * 90}°
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-      <View style={styles.controlRow}>
-        <Text style={styles.controlLabel}>Direction</Text>
-        <TouchableOpacity
-          accessibilityLabel="Reverse direction"
-          onPress={() => setReverse(!reverse)}
-          disabled={!def.hasDirection}
-          style={[
-            styles.choice,
-            reverse ? styles.choiceSelected : undefined,
-            !def.hasDirection ? styles.choiceDisabled : undefined,
-          ]}
-        >
-          <Text
-            style={[
-              styles.choiceLabel,
-              reverse ? styles.choiceLabelSelected : undefined,
-            ]}
-          >
-            {reverse ? 'Reversed' : 'Forward'}
-          </Text>
-        </TouchableOpacity>
-        {!def.hasDirection ? (
-          <Text style={styles.controlNote}>
-            Random effect — no direction to reverse.
-          </Text>
-        ) : null}
-      </View>
-      <TouchableOpacity
-        accessibilityLabel="Save effect to panel"
-        onPress={save}
-        disabled={saving || !connection}
-        style={[
-          styles.saveButton,
-          saving || !connection ? styles.saveButtonDisabled : undefined,
-        ]}
-      >
-        <Text style={styles.saveButtonLabel}>
-          {saving ? 'Saving…' : 'Save effect to panel'}
-        </Text>
-      </TouchableOpacity>
       <Text style={styles.note}>
         Swipe the preview left or right to change effect — it wraps
-        around at the ends. Saves 8 frames. The panel cycles them at
-        about a second each. Rotation defaults to 90° — the stock app
-        sends the grid rotated, so the panel matches what the stock
-        app shows.
+        around at the ends. The panel generates the animation from
+        the palette, so the preview shows the look, not the exact
+        pixels — the random effects re-randomize on the panel.
       </Text>
     </ScrollView>
   );
@@ -484,35 +525,4 @@ const styles = StyleSheet.create({
   sliderLabel: {fontSize: 16, width: 110},
   slider: {flex: 1},
   sliderValue: {fontSize: 16, width: 48, textAlign: 'right'},
-  controlRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 6,
-    width: '100%',
-  },
-  controlLabel: {fontSize: 16, width: 90},
-  controlNote: {fontSize: 13, color: '#555', marginLeft: 8},
-  choice: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: '#999',
-    borderRadius: 8,
-    marginHorizontal: 4,
-  },
-  choiceSelected: {backgroundColor: '#000', borderColor: '#000'},
-  choiceDisabled: {opacity: 0.4},
-  choiceLabel: {fontSize: 16},
-  choiceLabelSelected: {color: '#fff'},
-  saveButton: {
-    backgroundColor: '#000',
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    marginTop: 12,
-    width: '100%',
-    alignItems: 'center',
-  },
-  saveButtonDisabled: {opacity: 0.4},
-  saveButtonLabel: {fontSize: 16, color: '#fff', fontWeight: 'bold'},
 });

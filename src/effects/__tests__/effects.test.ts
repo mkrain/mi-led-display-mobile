@@ -7,11 +7,14 @@ import {
   nextEffectIndex,
   prevEffectIndex,
   rotateGrid,
+  sendPalette,
   speedFactor,
   type Grid,
 } from '../effects';
+import type {RGB} from '../../conversion/convert';
 
 const RED: [number, number, number] = [255, 0, 0];
+const WHITE: [number, number, number] = [255, 255, 255];
 
 function paramsFor(id: string, overrides: Partial<Parameters<
   (typeof EFFECTS)[number]['frames']
@@ -177,6 +180,29 @@ describe('effectivePalette', () => {
   test('an out-of-range selection leaves the palette unchanged', () => {
     expect(effectivePalette(palette, 3, PURPLE)).toEqual(palette);
     expect(effectivePalette(palette, -1, PURPLE)).toEqual(palette);
+  });
+});
+
+describe('sendPalette', () => {
+  test('rainbow appends its fixed white step', () => {
+    const def = EFFECTS.find(e => e.id === 'rainbow')!;
+    const sent = sendPalette(def, def.defaultPalette);
+    expect(sent).toHaveLength(7);
+    expect(sent[6]).toEqual(WHITE);
+    expect(sent.slice(0, 6)).toEqual(def.defaultPalette);
+  });
+
+  test('rainbow at a full 7 colours sends as-is, never 8', () => {
+    const def = EFFECTS.find(e => e.id === 'rainbow')!;
+    const seven: RGB[] = [...def.defaultPalette, [0, 255, 255]];
+    expect(sendPalette(def, seven)).toEqual(seven);
+  });
+
+  test('other effects send the palette unchanged', () => {
+    const def = EFFECTS.find(e => e.id === 'bands')!;
+    expect(sendPalette(def, def.defaultPalette)).toEqual(
+      def.defaultPalette,
+    );
   });
 });
 

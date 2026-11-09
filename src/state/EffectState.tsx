@@ -21,13 +21,10 @@ import {EFFECTS} from '../effects/effects';
  * itself keeps the last saved effect, so a restart
  * loses only the app's copy of the selection.
  *
- * Rotation is quarter turns clockwise applied to each
- * frame before sending. It defaults to 1 — the stock
- * app sends the grid rotated 90 degrees clockwise
- * (Jeremiah, Nov 8, 2026) — and the user can pick any
- * quarter turn instead. Reverse flips the frame order,
- * which reverses the motion on the effects that have
- * a direction.
+ * No rotation or reverse state: those were for the
+ * frame-based save, and the panel generates its own
+ * animation from the palette (PacketLogger, Nov 8-9,
+ * 2026) — there is no rotate or reverse command.
  */
 export type EffectState = {
   /** Index into EFFECTS. */
@@ -48,12 +45,6 @@ export type EffectState = {
   /** Speed percent, 0-100. 50 is the measured reference. */
   speed: number;
   setSpeed: (percent: number) => void;
-  /** Quarter turns clockwise, 0-3. Default 1 (stock). */
-  rotation: number;
-  setRotation: (quarters: number) => void;
-  /** Reverse the frame order. */
-  reverse: boolean;
-  setReverse: (reverse: boolean) => void;
 };
 
 const EffectStateContext = createContext<EffectState | null>(null);
@@ -67,8 +58,6 @@ export function EffectStateProvider({children}: {children: ReactNode}) {
   const [selectedPaletteIndex, setSelectedPaletteIndex] = useState(0);
   const [brightness, setBrightness] = useState(100);
   const [speed, setSpeed] = useState(50);
-  const [rotation, setRotation] = useState(1);
-  const [reverse, setReverse] = useState(false);
 
   function setEffectIndex(index: number) {
     setEffectIndexState(index);
@@ -94,10 +83,6 @@ export function EffectStateProvider({children}: {children: ReactNode}) {
         setBrightness,
         speed,
         setSpeed,
-        rotation,
-        setRotation,
-        reverse,
-        setReverse,
       }}
     >
       {children}

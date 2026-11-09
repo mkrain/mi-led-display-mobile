@@ -2,16 +2,28 @@ import type {RGB} from '../conversion/convert';
 import {applyBrightness} from '../lamp/lamp';
 
 /**
- * Light effect frame generators (Nov 8, 2026).
+ * Light effect preview generators (Nov 8, 2026).
  *
  * The stock Mode tab's Light effect page has 7 swipeable
  * presets. Each preset is a 16x16 pattern that animates;
- * the panel keeps playing it with the app closed, so the
- * stock app stores it — and the only way this panel
- * stores motion is a slideshow of frames cycling. The
- * panel videos Jeremiah recorded give the motion at
- * 50% speed, measured by sampling a frame a second and
- * finding the shift that best aligns consecutive frames:
+ * the panel keeps playing it with the app closed.
+ *
+ * PREVIEW ONLY (Nov 9, 2026, PacketLogger rebuild): the
+ * stock app sends no frames. It sends an effect select
+ * (0A 01), a palette (0A 02), a speed (0A 07), and a
+ * brightness (00 10), and the panel generates the
+ * animation itself. These generators exist only so the
+ * app can show the effect's look. For the random
+ * effects the preview re-randomizes locally — the
+ * panel re-randomizes on its own, so the preview and
+ * the panel never match cell for cell. The preview
+ * shows the pattern and the colours, not the exact
+ * arrangement.
+ *
+ * The panel videos Jeremiah recorded give the motion
+ * at 50% speed, measured by sampling a frame a second
+ * and finding the shift that best aligns consecutive
+ * frames:
  *
  *   1 Rainbow bands: scroll down 2 rows/sec, loop 8s
  *   2 Sparse confetti: random twinkle in place
@@ -33,21 +45,10 @@ import {applyBrightness} from '../lamp/lamp';
  * (their patterns alias), so their direction is the
  * best reading of the hue advance, not a measurement.
  *
- * Effect 1's loop is 8 seconds, and frames 8 seconds
- * apart are near-identical, so the save is 8 frames at
- * the panel's ~1s-per-frame cycle (SpawnDev's count).
- * Effect 4's loop reads closer to 6s, which does not
- * fit that model cleanly — effect 1 is the pilot and
- * 4 gets calibrated against the device, not guessed.
- *
  * Generators produce the PREVIEW orientation — the
- * grid as the stock app's preview shows it. The stock
- * app sends the grid rotated 90 degrees clockwise
- * (Jeremiah, Nov 8, 2026: photos sent as slideshows
- * are the correct orientation, so the rotation is
- * specific to the effect rendering, not the panel).
- * The send path applies that rotation by default, and
- * the user can rotate to any quarter turn instead.
+ * grid as the stock app's preview shows it. There is
+ * no rotate or reverse: those were for the frame-based
+ * save, and the panel generates its own animation.
  *
  * Speed: the rates above are at 50%. The speed slider
  * scales them — a scrolling step is baseStep times
@@ -56,8 +57,8 @@ import {applyBrightness} from '../lamp/lamp';
  * effect is static.
  *
  * Frames are deterministic: a seeded PRNG keyed by
- * effect and frame index, so the preview and the save
- * show the same animation.
+ * effect and frame index, so the preview shows a
+ * stable animation.
  */
 
 export type Grid = RGB[]; // 256 entries, row-major
@@ -150,12 +151,13 @@ export function rotateGrid(grid: Grid, quarters: number): Grid {
 }
 
 /**
- * The frame list for a save or a preview run: the
- * effect's frames, each rotated by the chosen quarter
- * turns, and reversed when the user asked for reverse.
- * Rotation is applied per frame; reverse flips the
- * frame order, which reverses the motion on every
- * effect that has a direction.
+ * The frame list for a preview run: the effect's
+ * frames, each rotated by the chosen quarter turns,
+ * and reversed when asked. The UI passes 0 and false
+ * — preview orientation, no reverse — because the
+ * panel generates its own animation. The rotation
+ * and reverse parameters stay for the tests and for
+ * any future preview-only transform.
  */
 export function effectFrames(
   def: EffectDef,
@@ -181,11 +183,12 @@ const RAINBOW6: RGB[] = [RED, ORANGE, YELLOW, GREEN, BLUE, MAGENTA];
 
 /**
  * 1 Rainbow: vertical hue bands (preview orientation),
- * scrolling right at 2 columns per frame at 50%. After
- * the default 90-degree clockwise rotation the panel
- * shows horizontal bands scrolling down at 2 rows/sec
- * — a colour travels row 1 to row 16, the rest of the
- * cycle following like a train (Jeremiah, Nov 8, 2026).
+ * scrolling right at 2 columns per frame at 50%. The
+ * panel shows the same cycle as horizontal bands
+ * scrolling down at 2 rows/sec — a colour travels row
+ * 1 to row 16, the rest of the cycle following like a
+ * train (Jeremiah, Nov 8, 2026) — because the panel
+ * generates the animation in its own orientation.
  *
  * The cycle is the 6 palette colours plus a fixed
  * white step: the stock palette holds 6 colours and
@@ -193,7 +196,7 @@ const RAINBOW6: RGB[] = [RED, ORANGE, YELLOW, GREEN, BLUE, MAGENTA];
  * seventh, white band — it is in the panel video and
  * the stock preview fades to pale at its right edge —
  * so white is part of the effect, not a palette colour
- * the user edits.
+ * the user edits. sendPalette appends it on send.
  */
 function rainbowFrames(params: EffectParams, count: number): Grid[] {
   const step = 2 * speedFactor(params.speed);
@@ -282,8 +285,9 @@ function specklesFrames(params: EffectParams, count: number): Grid[] {
 /**
  * 4 Bands: four colours in 4-row bands (preview
  * orientation), scrolling up at 4.5 rows per frame
- * at 50%. After the default rotation the panel shows
- * vertical bands scrolling right at ~4.5 cols/sec.
+ * at 50%. The panel shows vertical bands scrolling
+ * right at ~4.5 cols/sec — the panel generates the
+ * animation in its own orientation.
  *
  * The bands use only the first four palette colours:
  * the stock palette holds the same 6 as rainbow, but
