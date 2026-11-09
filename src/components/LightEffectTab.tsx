@@ -121,6 +121,12 @@ export function LightEffectTab() {
     selectedPaletteIndex,
     color,
   );
+  // Keyed as a string: effectivePalette returns a fresh
+  // array every render, and using that array as an
+  // effect dependency would re-run the effect (and
+  // reset the preview frame) on every render. The
+  // string only changes when the palette values do.
+  const displayKey = JSON.stringify(displayPalette);
   // The palette as sent (rainbow appends its fixed
   // white step). Keyed as a string so the send effect
   // below only fires when the sent values change, not
@@ -139,12 +145,17 @@ export function LightEffectTab() {
         0,
         false,
       ),
-    [def, displayPalette, brightness, speed],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [def, displayKey, brightness, speed],
   );
 
   // Advance the preview at the panel's rate: one
   // frame per second at 50% speed, faster or slower
   // with the speed slider. Paused at speed 0.
+  // Depends on displayKey, not displayPalette: the
+  // palette array is fresh every render, and depending
+  // on it reset the frame to 0 on every render — the
+  // preview flickered instead of advancing.
   useEffect(() => {
     setFrameIndex(0);
     if (speed <= 0) {
@@ -157,7 +168,7 @@ export function LightEffectTab() {
       1000 / speedFactor(speed),
     );
     return () => clearInterval(interval);
-  }, [speed, effectIndex, displayPalette, brightness]);
+  }, [speed, effectIndex, displayKey, brightness]);
 
   const preview = previewFrames[frameIndex] ?? previewFrames[0];
 
@@ -285,21 +296,33 @@ export function LightEffectTab() {
   }, [effectIndex, sendKey, speed, brightness]);
 
   // Swipe the preview to change effect, wrapping at the
-  // ends. Created fresh each render so the release handler
-  // sees the current effect index. Only clearly horizontal
-  // moves claim the touch, so vertical drags still scroll
-  // the page.
-  const swipeResponder = PanResponder.create({
-    onMoveShouldSetPanResponder: (_evt, gs) =>
-      Math.abs(gs.dx) > Math.abs(gs.dy) && Math.abs(gs.dx) > 20,
-    onPanResponderRelease: (_evt, gs) => {
-      if (gs.dx < -50) {
-        setEffectIndex(nextEffectIndex(effectIndex));
-      } else if (gs.dx > 50) {
-        setEffectIndex(prevEffectIndex(effectIndex));
-      }
-    },
-  });
+  // ends. Created ONCE (lazy ref), not fresh each render:
+  // a PanResponder built in the render body is replaced
+  // on every render, and a re-render mid-swipe — the
+  // preview interval firing, a send status update —
+  // discarded the responder before its release handler
+  // ran, so the swipe was lost. The release handler
+  // reads the current effect index from effectIndexRef
+  // (kept current for the send logic), so it never
+  // goes stale. Only clearly horizontal moves claim
+  // the touch, so vertical drags still scroll the page.
+  const swipeResponderRef = useRef<ReturnType<
+    typeof PanResponder.create
+  > | null>(null);
+  if (swipeResponderRef.current === null) {
+    swipeResponderRef.current = PanResponder.create({
+      onMoveShouldSetPanResponder: (_evt, gs) =>
+        Math.abs(gs.dx) > Math.abs(gs.dy) && Math.abs(gs.dx) > 20,
+      onPanResponderRelease: (_evt, gs) => {
+        if (gs.dx < -50) {
+          setEffectIndex(nextEffectIndex(effectIndexRef.current));
+        } else if (gs.dx > 50) {
+          setEffectIndex(prevEffectIndex(effectIndexRef.current));
+        }
+      },
+    });
+  }
+  const swipeResponder = swipeResponderRef.current;
 
   function onHueChange(next: RGB) {
     // The hue strip sets the working colour only. It
