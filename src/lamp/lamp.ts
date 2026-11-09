@@ -2,18 +2,20 @@ import type {RGB} from '../conversion/convert';
 
 /**
  * Lamplight (Nov 8, 2026): one solid colour across the
- * whole panel, saved as a single-image slideshow.
+ * whole panel.
  *
  * The stock app's Lamplight tab is a colour wheel, six
  * presets, and a brightness slider, and a selection is
  * automatically saved to the panel as a static display.
- * Neither public protocol reference (offe, SpawnDev)
- * has a lamp command, so this uses commands already
- * proven on device: a solid 16x16 picture, saved with
- * the Replace sequence, is a one-image slideshow, and a
- * one-image slideshow is a static display. Brightness
- * is RGB scaling — no panel brightness command exists
- * anywhere — so 59% means every channel times 0.59.
+ * The PacketLogger traces (Nov 8-9, 2026) show how: lamp
+ * mode (00 0B), one 7-byte solid colour write (0B), and
+ * a brightness write (00 10). Brightness is a panel
+ * parameter, not RGB scaling — the colour goes to the
+ * panel unscaled, with the brightness as a separate
+ * value. applyBrightness is still used for the preview
+ * (and lampGrid for the preview grid), so the app shows
+ * what the panel looks like; the BLE write sends the
+ * raw colour plus the brightness.
  *
  * Presets are the stock tab's six: red, orange, yellow,
  * green, blue, magenta.

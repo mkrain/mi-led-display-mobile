@@ -3,44 +3,38 @@ import {ScrollView, StyleSheet, Text, TouchableOpacity, View} from 'react-native
 import Slider from '@react-native-community/slider';
 import {PixelGrid, rgbToCss} from './PixelGrid';
 import {ColorPad} from './ColorPad';
-import {saveLampColorAllSlots} from '../ble/device';
+import {sendLampColour} from '../ble/device';
 import {useConnectionState} from '../state/ConnectionState';
 import {useLampState} from '../state/LampState';
 import {LAMP_PRESETS, LAMP_PRESET_NAMES, lampGrid} from '../lamp/lamp';
 
 /**
  * Lamplight subtab of the Mode screen (Nov 8, 2026): one
- * solid colour across the whole panel, saved as a
- * single-image slideshow.
+ * solid colour across the whole panel.
  *
- * Stock behaviour, from the stock tab's screenshots:
- * a colour wheel, six presets, a brightness slider, and
- * a selection is automatically saved to the panel as a
- * static display. The save writes the colour to all 8
- * slots: the count-1 slot save proved a single slot
- * appends — the colour appeared at the end of the
- * cycle — so one slot cannot make the panel static.
- * SpawnDev's own save flow always writes exactly 8
- * images, count 8, indices 1-8, after a Reset; this
- * is that transfer without the Reset, and a full
- * 8-image transfer defines the set, so the whole cycle
- * is one colour and reads as static. Device-verified
- * Nov 8, 2026. The stock lamp colour persists 8+
- * minutes with the stock app closed, so it is a stored
- * write, not a live send.
+ * Stock behaviour, from the PacketLogger traces: the
+ * stock app sends lamp mode (00 0B), one 7-byte solid
+ * colour write (0B), and a brightness write (00 10).
+ * No slideshow, no frames, no 70-write save. The
+ * colour is sent UNSCALED — brightness is a separate
+ * panel parameter, not RGB scaling — so the preview
+ * shows the scaled colour (what the panel looks
+ * like) while the panel gets the raw colour plus the
+ * brightness value. The stock lamp colour persists
+ * 8+ minutes with the stock app closed, so it is a
+ * stored write, not a live send.
  *
  * Auto-save is debounced, not per move event: dragging
- * the colour pad fires dozens of changes, and each save
- * is 70 writes at the proven pacing — 50 ms after the
- * brackets, 5 ms between chunks. The save runs 1s after
- * the last change. A change made while a save is running
- * waits and re-saves with the latest values when the
- * running save finishes. Nothing saves on mount, and
- * nothing saves while disconnected.
+ * the colour pad fires dozens of changes. The save runs
+ * 1s after the last change. A change made while a save
+ * is running waits and re-saves with the latest values
+ * when the running save finishes. Nothing saves on
+ * mount, and nothing saves while disconnected.
  *
- * Not in this pass: the stock tab's sun/moon row (its
- * function is not known yet) and the heart favourites
- * (app storage, a second axis).
+ * Not in this pass: the stock tab's sun/moon row (it
+ * sends no distinct BLE command, so its function is
+ * still not known) and the heart favourites (app
+ * storage, a second axis).
  */
 export function LamplightTab() {
   const {color, setColor, brightness, setBrightness} = useLampState();
@@ -75,9 +69,12 @@ export function LamplightTab() {
     savingRef.current = true;
     setStatus('Saving lamp colour…');
     try {
-      await saveLampColorAllSlots(
-        lampGrid(colorRef.current, brightnessRef.current),
-      );
+      // Raw colour, not the scaled grid: brightness is
+      // a separate panel parameter (00 10), not RGB
+      // scaling. The preview below shows the scaled
+      // colour; the panel gets the raw colour plus the
+      // brightness value.
+      await sendLampColour(colorRef.current, brightnessRef.current);
       setStatus('Lamp saved — the panel shows this colour.');
     } catch (e) {
       setStatus(
@@ -123,7 +120,7 @@ export function LamplightTab() {
       <Text style={styles.status}>{status}</Text>
       <PixelGrid pixels={preview} cellSize={20} />
       <Text style={styles.note}>
-        Saves the colour in all 8 slots — no disconnect, about a second.
+        Sends one colour write — no slideshow, no frames.
       </Text>
       <ColorPad
         color={color}
