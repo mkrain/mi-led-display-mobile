@@ -306,17 +306,21 @@ export function LightEffectTab() {
   // (kept current for the send logic), so it never
   // goes stale. Only clearly horizontal moves claim
   // the touch, so vertical drags still scroll the page.
+  // Thresholds are low on purpose (Nov 9, 2026): the
+  // swipe was not sensitive enough at 20/50, so it
+  // claims at 10pt of horizontal movement and fires
+  // at 30pt.
   const swipeResponderRef = useRef<ReturnType<
     typeof PanResponder.create
   > | null>(null);
   if (swipeResponderRef.current === null) {
     swipeResponderRef.current = PanResponder.create({
       onMoveShouldSetPanResponder: (_evt, gs) =>
-        Math.abs(gs.dx) > Math.abs(gs.dy) && Math.abs(gs.dx) > 20,
+        Math.abs(gs.dx) > Math.abs(gs.dy) && Math.abs(gs.dx) > 10,
       onPanResponderRelease: (_evt, gs) => {
-        if (gs.dx < -50) {
+        if (gs.dx < -30) {
           setEffectIndex(nextEffectIndex(effectIndexRef.current));
-        } else if (gs.dx > 50) {
+        } else if (gs.dx > 30) {
           setEffectIndex(prevEffectIndex(effectIndexRef.current));
         }
       },
@@ -381,6 +385,9 @@ export function LightEffectTab() {
             key={e.id}
             accessibilityLabel={e.name}
             onPress={() => setEffectIndex(i)}
+            // A generous tap target around a small dot
+            // (Nov 9, 2026): the dots were hard to hit.
+            hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}
             style={[
               styles.dot,
               i === effectIndex ? styles.dotSelected : undefined,
@@ -488,11 +495,11 @@ const styles = StyleSheet.create({
   padHint: {fontSize: 13, color: '#555', textAlign: 'center', marginBottom: 4},
   dotsRow: {flexDirection: 'row', marginTop: 12, marginBottom: 4},
   dot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
     backgroundColor: '#ccc',
-    marginHorizontal: 4,
+    marginHorizontal: 6,
   },
   dotSelected: {backgroundColor: '#000'},
   effectName: {fontSize: 16, fontWeight: 'bold', marginBottom: 8},
@@ -516,19 +523,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  // Palette dots and buttons are 44pt, the minimum
+  // comfortable touch target (Nov 9, 2026): at 36pt
+  // they were hard to select. The dots wrap inside
+  // their container when the palette is full, and the
+  // + and trash stay pinned to the right.
   paletteDot: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     marginHorizontal: 4,
     borderWidth: 1,
     borderColor: '#999',
   },
   paletteDotSelected: {borderWidth: 3, borderColor: '#000'},
   paletteButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: '#888',
     marginHorizontal: 4,
     alignItems: 'center',
