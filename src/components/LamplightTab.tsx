@@ -1,10 +1,10 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {ScrollView, StyleSheet, Text, TouchableOpacity, View} from 'react-native';
-import Slider from '@react-native-community/slider';
 import {PixelGrid, rgbToCss} from './PixelGrid';
 import {ColorPad} from './ColorPad';
 import {sendLampColour} from '../ble/device';
 import {useConnectionState} from '../state/ConnectionState';
+import {useBrightnessState} from '../state/BrightnessState';
 import {useLampState} from '../state/LampState';
 import {LAMP_PRESETS, LAMP_PRESET_NAMES, lampGrid} from '../lamp/lamp';
 
@@ -13,16 +13,17 @@ import {LAMP_PRESETS, LAMP_PRESET_NAMES, lampGrid} from '../lamp/lamp';
  * solid colour across the whole panel.
  *
  * Stock behaviour, from the PacketLogger traces: the
- * stock app sends lamp mode (00 0B), one 7-byte solid
- * colour write (0B), and a brightness write (00 10).
- * No slideshow, no frames, no 70-write save. The
- * colour is sent UNSCALED — brightness is a separate
- * panel parameter, not RGB scaling — so the preview
- * shows the scaled colour (what the panel looks
- * like) while the panel gets the raw colour plus the
- * brightness value. The stock lamp colour persists
- * 8+ minutes with the stock app closed, so it is a
- * stored write, not a live send.
+ * stock app sends lamp mode (00 0B) and one 7-byte solid
+ * colour write (0B). No slideshow, no frames, no
+ * 70-write save. The colour is sent UNSCALED — brightness
+ * is a separate panel parameter (00 10), not RGB scaling
+ * — and it is GLOBAL, set from the Connect tab's slider
+ * (Nov 9, 2026: the device test proved it dims a playing
+ * slideshow). So this tab sends only the colour; the
+ * preview still shows the scaled colour (what the panel
+ * looks like) using the global brightness. The stock lamp
+ * colour persists 8+ minutes with the stock app closed,
+ * so it is a stored write, not a live send.
  *
  * Auto-save is debounced, not per move event: dragging
  * the colour pad fires dozens of changes. The save runs
@@ -37,20 +38,19 @@ import {LAMP_PRESETS, LAMP_PRESET_NAMES, lampGrid} from '../lamp/lamp';
  * storage, a second axis).
  */
 export function LamplightTab() {
-  const {color, setColor, brightness, setBrightness} = useLampState();
+  const {color, setColor} = useLampState();
+  const {brightness} = useBrightnessState();
   const {connection} = useConnectionState();
   const [status, setStatus] = useState(
-    'Pick a colour and a brightness. It saves to the panel on its own.',
+    'Pick a colour. It saves to the panel on its own.',
   );
   const [scrollEnabled, setScrollEnabled] = useState(true);
 
   // Latest values for the debounced save, which runs
   // after the render that scheduled it.
   const colorRef = useRef(color);
-  const brightnessRef = useRef(brightness);
   const connectionRef = useRef(connection);
   colorRef.current = color;
-  brightnessRef.current = brightness;
   connectionRef.current = connection;
   const savingRef = useRef(false);
   const pendingRef = useRef(false);
@@ -70,11 +70,11 @@ export function LamplightTab() {
     setStatus('Saving lamp colour…');
     try {
       // Raw colour, not the scaled grid: brightness is
-      // a separate panel parameter (00 10), not RGB
-      // scaling. The preview below shows the scaled
-      // colour; the panel gets the raw colour plus the
-      // brightness value.
-      await sendLampColour(colorRef.current, brightnessRef.current);
+      // a separate global panel parameter (00 10), set
+      // from the Connect tab — the panel already holds
+      // it, so this send is the colour only. The preview
+      // below shows the scaled colour.
+      await sendLampColour(colorRef.current);
       setStatus('Lamp saved — the panel shows this colour.');
     } catch (e) {
       setStatus(
@@ -108,7 +108,7 @@ export function LamplightTab() {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [color, brightness]);
+  }, [color]);
 
   const preview = lampGrid(color, brightness);
 
@@ -149,19 +149,6 @@ export function LamplightTab() {
       <Text style={styles.rgbText}>
         R:{color[0]} G:{color[1]} B:{color[2]}
       </Text>
-      <View style={styles.sliderRow}>
-        <Text style={styles.sliderLabel}>Brightness</Text>
-        <Slider
-          style={styles.slider}
-          minimumValue={0}
-          maximumValue={100}
-          step={1}
-          value={brightness}
-          onValueChange={value => setBrightness(Math.round(value))}
-          accessibilityLabel="Brightness"
-        />
-        <Text style={styles.sliderValue}>{brightness}%</Text>
-      </View>
     </ScrollView>
   );
 }
@@ -175,8 +162,4 @@ const styles = StyleSheet.create({
   stripSegment: {flex: 1, borderWidth: 1, borderColor: '#999', marginHorizontal: 1},
   stripSelected: {borderWidth: 3, borderColor: '#000'},
   rgbText: {fontSize: 16, marginTop: 12},
-  sliderRow: {flexDirection: 'row', alignItems: 'center', marginVertical: 4, width: '100%'},
-  sliderLabel: {fontSize: 16, width: 90},
-  slider: {flex: 1},
-  sliderValue: {fontSize: 16, width: 48, textAlign: 'right'},
 });

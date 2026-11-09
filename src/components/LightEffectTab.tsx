@@ -12,11 +12,11 @@ import {PixelGrid, rgbToCss} from '../components/PixelGrid';
 import {ColorPad} from '../components/ColorPad';
 import {
   selectEffect,
-  sendEffectBrightness,
   sendEffectPalette,
   sendEffectSpeed,
 } from '../ble/device';
 import {useConnectionState} from '../state/ConnectionState';
+import {useBrightnessState} from '../state/BrightnessState';
 import {useEffectState} from '../state/EffectState';
 import {
   EFFECTS,
@@ -34,20 +34,23 @@ import type {RGB} from '../conversion/convert';
 /**
  * Light effect subtab of the Mode screen (Nov 8, 2026):
  * the stock app's 7 swipeable effect presets, with a
- * live preview, the hue strip and palette, and
- * brightness and speed sliders.
+ * live preview, the hue strip and palette, and a speed
+ * slider. Brightness is NOT here: it is a global panel
+ * setting on the Connect tab (Nov 9, 2026 — the device
+ * test proved it dims a playing slideshow), so this tab
+ * sends no brightness and the preview reads the global
+ * value.
  *
  * The stock app sends no frames (PacketLogger, Nov 8-9,
  * 2026): it sends effect mode (00 0A), an effect select
- * (0A 01, 1-7), a palette (0A 02), a speed (0A 07), and
- * a brightness (00 10), and the panel generates the
- * animation itself. This tab does the same. Picking an
- * effect sends the full sequence; a palette, speed, or
- * brightness change afterwards sends only that
- * parameter. Sends are debounced 300 ms, so dragging
- * a slider or the hue strip does not flood the panel —
- * the stock app sends a fresh palette on every drag
- * movement, but a short debounce is the same result
+ * (0A 01, 1-7), a palette (0A 02), and a speed (0A 07),
+ * and the panel generates the animation itself. This tab
+ * does the same. Picking an effect sends the full
+ * sequence; a palette or speed change afterwards sends
+ * only that parameter. Sends are debounced 300 ms, so
+ * dragging a slider or the hue strip does not flood the
+ * panel — the stock app sends a fresh palette on every
+ * drag movement, but a short debounce is the same result
  * with fewer writes. Nothing sends on mount, and
  * nothing sends while disconnected.
  *
@@ -98,11 +101,12 @@ export function LightEffectTab() {
     setColor,
     selectedPaletteIndex,
     setSelectedPaletteIndex,
-    brightness,
-    setBrightness,
     speed,
     setSpeed,
   } = useEffectState();
+  // Global panel brightness (Connect tab): the preview
+  // scales by it so it matches what the panel shows.
+  const {brightness} = useBrightnessState();
   const {connection} = useConnectionState();
   const [status, setStatus] = useState(
     'Pick an effect. It sends to the panel on its own.',
@@ -177,13 +181,11 @@ export function LightEffectTab() {
   const effectIndexRef = useRef(effectIndex);
   const displayPaletteRef = useRef(displayPalette);
   const speedRef = useRef(speed);
-  const brightnessRef = useRef(brightness);
   const defRef = useRef(def);
   const connectionRef = useRef(connection);
   effectIndexRef.current = effectIndex;
   displayPaletteRef.current = displayPalette;
   speedRef.current = speed;
-  brightnessRef.current = brightness;
   defRef.current = def;
   connectionRef.current = connection;
   // What the panel last received, so a send only
@@ -192,7 +194,6 @@ export function LightEffectTab() {
     effectIndex: number;
     paletteKey: string;
     speed: number;
-    brightness: number;
   } | null>(null);
   const sendingRef = useRef(false);
   const pendingRef = useRef(false);
@@ -216,14 +217,7 @@ export function LightEffectTab() {
       last === null || last.effectIndex !== effectIndexRef.current;
     const paletteChanged = last === null || last.paletteKey !== paletteKey;
     const speedChanged = last === null || last.speed !== speedRef.current;
-    const brightnessChanged =
-      last === null || last.brightness !== brightnessRef.current;
-    if (
-      !effectChanged &&
-      !paletteChanged &&
-      !speedChanged &&
-      !brightnessChanged
-    ) {
+    if (!effectChanged && !paletteChanged && !speedChanged) {
       return;
     }
     sendingRef.current = true;
@@ -231,12 +225,13 @@ export function LightEffectTab() {
     try {
       if (effectChanged) {
         // A new effect gets the full sequence: mode,
-        // select, palette, speed, brightness.
+        // select, palette, speed. No brightness — it is
+        // global, set from the Connect tab, and the panel
+        // already holds it.
         await selectEffect(
           effectIndexRef.current + 1,
           sendPalette(defRef.current, displayPaletteRef.current),
           speedRef.current,
-          brightnessRef.current,
         );
       } else {
         // Otherwise only the changed parameters, so a
@@ -250,15 +245,11 @@ export function LightEffectTab() {
         if (speedChanged) {
           await sendEffectSpeed(speedRef.current);
         }
-        if (brightnessChanged) {
-          await sendEffectBrightness(brightnessRef.current);
-        }
       }
       lastSentRef.current = {
         effectIndex: effectIndexRef.current,
         paletteKey,
         speed: speedRef.current,
-        brightness: brightnessRef.current,
       };
       setStatus('Effect sent — the panel plays it.');
     } catch (e) {
@@ -293,7 +284,7 @@ export function LightEffectTab() {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectIndex, sendKey, speed, brightness]);
+  }, [effectIndex, sendKey, speed]);
 
   // Swipe the preview to change effect, wrapping at the
   // ends. Created ONCE (lazy ref), not fresh each render:
@@ -457,19 +448,6 @@ export function LightEffectTab() {
       <Text style={styles.rgbText}>
         R:{color[0]} G:{color[1]} B:{color[2]}
       </Text>
-      <View style={styles.sliderRow}>
-        <Text style={styles.sliderLabel}>☀ Brightness</Text>
-        <Slider
-          style={styles.slider}
-          minimumValue={0}
-          maximumValue={100}
-          step={1}
-          value={brightness}
-          onValueChange={value => setBrightness(Math.round(value))}
-          accessibilityLabel="Brightness"
-        />
-        <Text style={styles.sliderValue}>{brightness}%</Text>
-      </View>
       <View style={styles.sliderRow}>
         <Text style={styles.sliderLabel}>⚡ Speed</Text>
         <Slider

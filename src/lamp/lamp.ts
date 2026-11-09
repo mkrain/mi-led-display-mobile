@@ -8,14 +8,15 @@ import type {RGB} from '../conversion/convert';
  * presets, and a brightness slider, and a selection is
  * automatically saved to the panel as a static display.
  * The PacketLogger traces (Nov 8-9, 2026) show how: lamp
- * mode (00 0B), one 7-byte solid colour write (0B), and
- * a brightness write (00 10). Brightness is a panel
- * parameter, not RGB scaling — the colour goes to the
- * panel unscaled, with the brightness as a separate
- * value. applyBrightness is still used for the preview
+ * mode (00 0B) and one 7-byte solid colour write (0B).
+ * Brightness is a panel parameter, not RGB scaling — the
+ * colour goes to the panel unscaled — and it is GLOBAL
+ * (Nov 9, 2026: the device test proved it dims a playing
+ * slideshow), set from the Connect tab, not sent with the
+ * colour. applyBrightness is still used for the preview
  * (and lampGrid for the preview grid), so the app shows
  * what the panel looks like; the BLE write sends the
- * raw colour plus the brightness.
+ * raw colour only.
  *
  * Presets are the stock tab's six: red, orange, yellow,
  * green, blue, magenta.

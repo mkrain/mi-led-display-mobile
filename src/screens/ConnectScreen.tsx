@@ -1,5 +1,6 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {Button, Platform, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View} from 'react-native';
+import Slider from '@react-native-community/slider';
 import {useFocusEffect} from '@react-navigation/native';
 import {
   connectToDisplay,
@@ -9,6 +10,7 @@ import {
   requestAndroidPermissions,
   scanAllPeripherals,
   scanForDisplay,
+  sendBrightness,
   waitForBleReady,
   writeCommand,
 } from '../ble/device';
@@ -16,6 +18,7 @@ import {powerOffCommand, powerOnCommand} from '../ble/protocol';
 import {loadAutoConnect, saveAutoConnect} from '../settings/autoConnect';
 import {loadLastDevice} from '../settings/lastDevice';
 import {useConnectionState} from '../state/ConnectionState';
+import {useBrightnessState} from '../state/BrightnessState';
 import {BottomMenu} from '../components/BottomMenu';
 import type {Peripheral} from 'react-native-ble-manager';
 
@@ -80,6 +83,57 @@ export function ConnectScreen() {
   // no query command, so this starts at "on" (a panel that advertises
   // is on) and flips only after a power command succeeds.
   const [powerOn, setPowerOn] = useState(true);
+  // Global panel brightness (Nov 9, 2026): one slider for the
+  // whole panel, on this tab. Brightness (00 10) is a panel-wide
+  // setting — the device test proved it dims a playing slideshow,
+  // and the stock app keeps it in Settings — so it lives here,
+  // not on the Lamp or Light effect tabs. The send is debounced
+  // 300 ms: dragging the slider fires dozens of changes.
+  // Nothing sends on mount, and nothing sends while disconnected.
+  const {brightness, setBrightness} = useBrightnessState();
+  const [brightnessStatus, setBrightnessStatus] = useState<string | null>(
+    null,
+  );
+  const brightnessRef = useRef(brightness);
+  const connectionRef = useRef(connection);
+  brightnessRef.current = brightness;
+  connectionRef.current = connection;
+  const brightnessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const brightnessMountedRef = useRef(false);
+
+  useEffect(() => {
+    if (!brightnessMountedRef.current) {
+      brightnessMountedRef.current = true;
+      return;
+    }
+    if (brightnessTimerRef.current) {
+      clearTimeout(brightnessTimerRef.current);
+    }
+    brightnessTimerRef.current = setTimeout(() => {
+      if (!connectionRef.current) {
+        setBrightnessStatus(
+          'Not connected — brightness sends once connected.',
+        );
+        return;
+      }
+      sendBrightness(brightnessRef.current)
+        .then(() =>
+          setBrightnessStatus(`Brightness ${brightnessRef.current}% sent.`),
+        )
+        .catch(e =>
+          setBrightnessStatus(
+            `Brightness send failed: ${e instanceof Error ? e.message : String(e)}`,
+          ),
+        );
+    }, 300);
+    return () => {
+      if (brightnessTimerRef.current) {
+        clearTimeout(brightnessTimerRef.current);
+      }
+    };
+  }, [brightness]);
   // Auto-connect: persisted toggle. When on, a display scan that finds
   // at least one "MI Matrix Display" connects to the first one (the
   // list is strongest-first, so this is the nearest panel) instead of
@@ -531,6 +585,27 @@ export function ConnectScreen() {
           </Text>
         </TouchableOpacity>
       </View>
+      {/* Global panel brightness (Nov 9, 2026): one slider
+          for the whole panel. It dims everything the panel
+          shows — lamp, effects, and slideshows — and the
+          panel keeps it until you change it. */}
+      <View style={styles.brightnessRow}>
+        <Text style={styles.brightnessLabel}>☀ Brightness</Text>
+        <Slider
+          style={styles.brightnessSlider}
+          minimumValue={0}
+          maximumValue={100}
+          step={1}
+          value={brightness}
+          onValueChange={value => setBrightness(Math.round(value))}
+          disabled={!connectedId}
+          accessibilityLabel="Panel brightness"
+        />
+        <Text style={styles.brightnessValue}>{brightness}%</Text>
+      </View>
+      {brightnessStatus ? (
+        <Text style={styles.brightnessStatus}>{brightnessStatus}</Text>
+      ) : null}
       <Text style={styles.note}>
         Note: power, draw, and photo sends need a live connection first. If a
         send fails, check that the display is on and in range.
@@ -559,6 +634,19 @@ const styles = StyleSheet.create({
   powerIconOn: {color: '#1a7a2e'},
   powerIconOff: {color: '#888'},
   powerLabel: {fontSize: 16, fontWeight: '600'},
+  brightnessRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#ddd',
+    marginTop: 16,
+  },
+  brightnessLabel: {fontSize: 16, fontWeight: '600', width: 110},
+  brightnessSlider: {flex: 1},
+  brightnessValue: {fontSize: 16, width: 48, textAlign: 'right'},
+  brightnessStatus: {fontSize: 13, color: '#555', textAlign: 'center'},
   title: {fontSize: 22, fontWeight: 'bold', marginBottom: 8},
   banner: {padding: 10, borderRadius: 8, marginBottom: 8},
   bannerConnected: {backgroundColor: '#d6f5dd'},

@@ -22,9 +22,6 @@ import type {RGB} from '../conversion/convert';
 export type LampState = {
   color: RGB;
   setColor: (color: RGB) => void;
-  /** Brightness percent, 0-100. */
-  brightness: number;
-  setBrightness: (percent: number) => void;
 };
 
 const LampStateContext = createContext<LampState | null>(null);
@@ -32,12 +29,9 @@ const LampStateContext = createContext<LampState | null>(null);
 export function LampStateProvider({children}: {children: ReactNode}) {
   // Red, like the stock tab's screenshot (R255 G0 B0).
   const [color, setColor] = useState<RGB>([255, 0, 0]);
-  const [brightness, setBrightness] = useState(100);
 
   return (
-    <LampStateContext.Provider
-      value={{color, setColor, brightness, setBrightness}}
-    >
+    <LampStateContext.Provider value={{color, setColor}}>
       {children}
     </LampStateContext.Provider>
   );

@@ -39,9 +39,6 @@ export type EffectState = {
   /** The palette entry the hue strip is editing, by index. */
   selectedPaletteIndex: number;
   setSelectedPaletteIndex: (index: number) => void;
-  /** Brightness percent, 0-100. */
-  brightness: number;
-  setBrightness: (percent: number) => void;
   /** Speed percent, 0-100. 50 is the measured reference. */
   speed: number;
   setSpeed: (percent: number) => void;
@@ -56,7 +53,6 @@ export function EffectStateProvider({children}: {children: ReactNode}) {
   ]);
   const [color, setColor] = useState<RGB>([255, 0, 0]);
   const [selectedPaletteIndex, setSelectedPaletteIndex] = useState(0);
-  const [brightness, setBrightness] = useState(100);
   const [speed, setSpeed] = useState(50);
 
   function setEffectIndex(index: number) {
@@ -79,8 +75,6 @@ export function EffectStateProvider({children}: {children: ReactNode}) {
         setColor,
         selectedPaletteIndex,
         setSelectedPaletteIndex,
-        brightness,
-        setBrightness,
         speed,
         setSpeed,
       }}

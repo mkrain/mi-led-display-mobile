@@ -543,34 +543,35 @@ export async function saveStaticPictureToDevice(
  * the stock app never sends 0x0F/0x02/0x11 for Mode
  * features, and the 70-write saves are gone. The panel
  * generates the animation itself from a palette + effect
- * number + speed + brightness, so Mode writes are a few
- * tiny commands, not a slideshow.
+ * number + speed, so Mode writes are a few tiny commands,
+ * not a slideshow.
  *
- * Lamp: lamp mode select, one solid-colour write, one
- * brightness write. The colour is sent UNSCALED — the
- * brightness is a separate panel parameter (00 10),
- * not RGB scaling. The preview still shows the scaled
- * colour, so it looks like the panel; the panel gets
- * the raw colour plus the brightness value.
+ * Lamp: lamp mode select, one solid-colour write. The
+ * colour is sent UNSCALED — brightness is a separate
+ * panel parameter (00 10), not RGB scaling.
  *
  * Effect: effect mode select, effect select (1-7),
- * palette, speed, brightness. Selecting an effect
- * sends the full sequence; a palette/speed/brightness
- * change afterwards sends only that parameter (with
- * the mode select for the palette, so a stray lamp
- * mode cannot swallow it). The stock app sends a
- * fresh palette on every drag movement; this app
- * debounces drags in the UI and sends the latest.
+ * palette, speed. Selecting an effect sends the full
+ * sequence; a palette/speed change afterwards sends
+ * only that parameter (with the mode select for the
+ * palette, so a stray lamp mode cannot swallow it).
+ * The stock app sends a fresh palette on every drag
+ * movement; this app debounces drags in the UI and
+ * sends the latest.
+ *
+ * Brightness (00 10) is a GLOBAL panel setting, not
+ * part of the lamp or effect sends (Nov 9, 2026): the
+ * device test proved it dims a playing slideshow, and
+ * the stock app keeps it in Settings as "Brightness
+ * Adjustment". It lives on the Connect tab as one
+ * slider (sendBrightness) and the panel holds it
+ * across modes, so the lamp and effect sends do not
+ * re-send it.
  */
-export async function sendLampColour(
-  color: RGB,
-  brightness: number,
-): Promise<void> {
+export async function sendLampColour(color: RGB): Promise<void> {
   await writeCommand(lampModeCommand());
   await sleep(2);
   await writeCommand(solidColourCommand(color[0], color[1], color[2]));
-  await sleep(2);
-  await writeCommand(brightnessCommand(brightness));
   await sleep(2);
 }
 
@@ -579,7 +580,6 @@ export async function selectEffect(
   effectNumber: number,
   palette: readonly RGB[],
   speed: number,
-  brightness: number,
 ): Promise<void> {
   await writeCommand(effectModeCommand());
   await sleep(2);
@@ -588,8 +588,6 @@ export async function selectEffect(
   await writeCommand(paletteCommand(palette));
   await sleep(2);
   await writeCommand(speedCommand(speed));
-  await sleep(2);
-  await writeCommand(brightnessCommand(brightness));
   await sleep(2);
 }
 
@@ -609,31 +607,14 @@ export async function sendEffectSpeed(speed: number): Promise<void> {
   await sleep(2);
 }
 
-/** Send a new brightness for the current effect. */
-export async function sendEffectBrightness(
-  brightness: number,
-): Promise<void> {
+/**
+ * Send the global panel brightness (00 10). One
+ * write; the Connect tab's slider calls this (debounced)
+ * and the panel holds the value across modes.
+ */
+export async function sendBrightness(brightness: number): Promise<void> {
   await writeCommand(brightnessCommand(brightness));
   await sleep(2);
-}
-
-/**
- * Test writes (Nov 9, 2026): send one raw brightness or
- * speed command — the same bytes the Mode tab sends — to
- * test whether they are global panel settings or Mode-only.
- * The Slideshow screen's test buttons call these while a
- * slideshow is playing; the panel's reaction (or lack of
- * one) is the result. Brightness 20% should visibly dim a
- * playing slideshow if brightness is global; speed 100%
- * should cycle it faster (and 10% slower) if speed is.
- */
-export async function sendTestBrightness(value: number): Promise<void> {
-  await sendEffectBrightness(value);
-}
-
-/** Test write: one raw speed command (see sendTestBrightness). */
-export async function sendTestSpeed(value: number): Promise<void> {
-  await sendEffectSpeed(value);
 }
 
 /**

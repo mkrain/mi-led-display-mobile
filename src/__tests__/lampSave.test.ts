@@ -2,12 +2,10 @@ import BleManager from 'react-native-ble-manager';
 import {clearConnection, setConnection} from '../ble/connection';
 import {
   selectEffect,
-  sendEffectBrightness,
+  sendBrightness,
   sendEffectPalette,
   sendEffectSpeed,
   sendLampColour,
-  sendTestBrightness,
-  sendTestSpeed,
   saveStaticPictureToDevice,
 } from '../ble/device';
 import {solidGrid} from '../lamp/lamp';
@@ -67,13 +65,14 @@ describe('sendLampColour', () => {
     clearConnection();
   });
 
-  test('lamp mode + one colour write + brightness, no 0x0F/0x02/0x11', async () => {
-    await sendLampColour([255, 0, 0], 29);
+  test('lamp mode + one colour write, no brightness, no 0x0F/0x02/0x11', async () => {
+    await sendLampColour([255, 0, 0]);
     const sent: number[][] = writes.mock.calls.map(call => call[3] as number[]);
-    expect(sent).toHaveLength(3);
+    // Brightness is global (Connect tab, Nov 9, 2026),
+    // so the lamp send is the colour only — 2 writes.
+    expect(sent).toHaveLength(2);
     expect(sent[0]).toEqual([0xbc, 0x00, 0x0b, 0x0b, 0x55]);
     expect(sent[1]).toEqual([0xbc, 0x0b, 0xff, 0x00, 0x00, 0x0a, 0x55]);
-    expect(sent[2]).toEqual([0xbc, 0x00, 0x10, 0x1d, 0x2d, 0x55]);
     // No frames, no slideshow, no Reset: the colour is
     // one 7-byte write, not a 70-write save.
     expect(sent.some(bytes => bytes[1] === 0x0f)).toBe(false);
@@ -93,7 +92,7 @@ describe('selectEffect', () => {
     clearConnection();
   });
 
-  test('effect 1: mode + select + palette + speed + brightness', async () => {
+  test('effect 1: mode + select + palette + speed, no brightness', async () => {
     const palette: [number, number, number][] = [
       [255, 0, 0],
       [255, 162, 0],
@@ -103,9 +102,11 @@ describe('selectEffect', () => {
       [255, 0, 255],
       [255, 255, 255],
     ];
-    await selectEffect(1, palette, 50, 100);
+    await selectEffect(1, palette, 50);
     const sent: number[][] = writes.mock.calls.map(call => call[3] as number[]);
-    expect(sent).toHaveLength(5);
+    // Brightness is global (Connect tab, Nov 9, 2026),
+    // so the effect select is 4 writes, no brightness.
+    expect(sent).toHaveLength(4);
     expect(sent[0]).toEqual([0xbc, 0x00, 0x0a, 0x0a, 0x55]);
     expect(sent[1]).toEqual([0xbc, 0x0a, 0x01, 0x01, 0x0c, 0x55]);
     expect(sent[2]).toEqual([
@@ -115,14 +116,13 @@ describe('selectEffect', () => {
       0xff, 0xff, 0xff, 0xaa, 0x55,
     ]);
     expect(sent[3]).toEqual([0xbc, 0x0a, 0x07, 0x32, 0x43, 0x55]);
-    expect(sent[4]).toEqual([0xbc, 0x00, 0x10, 0x64, 0x74, 0x55]);
     expect(sent.some(bytes => bytes[1] === 0x0f)).toBe(false);
     expect(sent.some(bytes => bytes[1] === 0x02)).toBe(false);
     expect(sent.some(bytes => bytes[1] === 0x11)).toBe(false);
   });
 });
 
-describe('sendEffectPalette / sendEffectSpeed / sendEffectBrightness', () => {
+describe('sendEffectPalette / sendEffectSpeed', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     clearConnection();
@@ -153,16 +153,9 @@ describe('sendEffectPalette / sendEffectSpeed / sendEffectBrightness', () => {
     expect(sent).toHaveLength(1);
     expect(sent[0]).toEqual([0xbc, 0x0a, 0x07, 0x51, 0x62, 0x55]);
   });
-
-  test('brightness update: one write', async () => {
-    await sendEffectBrightness(48);
-    const sent: number[][] = writes.mock.calls.map(call => call[3] as number[]);
-    expect(sent).toHaveLength(1);
-    expect(sent[0]).toEqual([0xbc, 0x00, 0x10, 0x30, 0x40, 0x55]);
-  });
 });
 
-describe('sendTestBrightness / sendTestSpeed', () => {
+describe('sendBrightness', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     clearConnection();
@@ -173,17 +166,10 @@ describe('sendTestBrightness / sendTestSpeed', () => {
     clearConnection();
   });
 
-  test('test brightness: one raw 00 10 write', async () => {
-    await sendTestBrightness(20);
+  test('global brightness: one raw 00 10 write', async () => {
+    await sendBrightness(48);
     const sent: number[][] = writes.mock.calls.map(call => call[3] as number[]);
     expect(sent).toHaveLength(1);
-    expect(sent[0]).toEqual([0xbc, 0x00, 0x10, 0x14, 0x24, 0x55]);
-  });
-
-  test('test speed: one raw 0A 07 write', async () => {
-    await sendTestSpeed(100);
-    const sent: number[][] = writes.mock.calls.map(call => call[3] as number[]);
-    expect(sent).toHaveLength(1);
-    expect(sent[0]).toEqual([0xbc, 0x0a, 0x07, 0x64, 0x75, 0x55]);
+    expect(sent[0]).toEqual([0xbc, 0x00, 0x10, 0x30, 0x40, 0x55]);
   });
 });
