@@ -113,23 +113,26 @@ describe('rainbow', () => {
 });
 
 describe('bands', () => {
-  test('four colours in 4-row bands, scrolling up', () => {
+  test('one band per palette colour, scrolling up', () => {
     const {def, params} = paramsFor('bands');
     const frames = def.frames(params, 2);
     const pal = def.defaultPalette;
-    for (let r = 0; r < 4; r++) {
-      expect(frames[0][r * 16]).toEqual(pal[0]);
-      expect(frames[0][(r + 4) * 16]).toEqual(pal[1]);
-      expect(frames[0][(r + 8) * 16]).toEqual(pal[2]);
-      expect(frames[0][(r + 12) * 16]).toEqual(pal[3]);
-    }
+    // 6 colours over 16 rows: bands 3,3,2,3,3,2 rows
+    // wide — row 0 red, 3 orange, 6 yellow, 8 green,
+    // 11 blue, 14 magenta.
+    expect(frames[0][0]).toEqual(pal[0]);
+    expect(frames[0][3 * 16]).toEqual(pal[1]);
+    expect(frames[0][6 * 16]).toEqual(pal[2]);
+    expect(frames[0][8 * 16]).toEqual(pal[3]);
+    expect(frames[0][11 * 16]).toEqual(pal[4]);
+    expect(frames[0][14 * 16]).toEqual(pal[5]);
     // Frame 1, offset 4.5 rows up: row 0 shows band 1,
-    // row 8 shows band 3.
+    // row 8 shows band 4.
     expect(frames[1][0]).toEqual(pal[1]);
-    expect(frames[1][8 * 16]).toEqual(pal[3]);
+    expect(frames[1][8 * 16]).toEqual(pal[4]);
   });
 
-  test('bands use only the first four palette colours', () => {
+  test('every palette colour appears in the bands', () => {
     const {def, params} = paramsFor('bands');
     expect(params.palette).toHaveLength(6);
     const frames = def.frames(params, 8);
@@ -140,7 +143,7 @@ describe('bands', () => {
       }
     }
     expect([...used].sort()).toEqual(
-      params.palette.slice(0, 4).map(c => c.join(',')).sort(),
+      params.palette.map(c => c.join(',')).sort(),
     );
   });
 });
@@ -215,6 +218,27 @@ describe('diagonal', () => {
     expect(frames[0][4]).toEqual(pal[1]);
     expect(frames[0][4 * 16]).toEqual(pal[1]);
     expect(frames[1][0]).toEqual(pal[1]);
+  });
+});
+
+describe('rainbow diagonal', () => {
+  test('a black band sits between each colour band', () => {
+    const {def, params} = paramsFor('rainbow-diagonal');
+    const frames = def.frames(params, 2);
+    const pal = def.defaultPalette;
+    const BLACK: [number, number, number] = [0, 0, 0];
+    // Diagonal index r - c, band width 4, cycle
+    // [c0, black, c1, black, ...]. Down column 0
+    // the index rises, so the bands read in order:
+    // red, black, orange, black.
+    expect(frames[0][0]).toEqual(pal[0]);
+    expect(frames[0][4 * 16]).toEqual(BLACK);
+    expect(frames[0][8 * 16]).toEqual(pal[1]);
+    expect(frames[0][12 * 16]).toEqual(BLACK);
+    // Frame 1, offset 4 (one band): cell (0,0) is now
+    // black, cell (4,0) is orange.
+    expect(frames[1][0]).toEqual(BLACK);
+    expect(frames[1][4 * 16]).toEqual(pal[1]);
   });
 });
 

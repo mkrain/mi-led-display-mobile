@@ -283,31 +283,29 @@ function specklesFrames(params: EffectParams, count: number): Grid[] {
 }
 
 /**
- * 4 Bands: four colours in 4-row bands (preview
- * orientation), scrolling up at 4.5 rows per frame
- * at 50%. The panel shows vertical bands scrolling
- * right at ~4.5 cols/sec — the panel generates the
- * animation in its own orientation.
- *
- * The bands use only the first four palette colours:
- * the stock palette holds the same 6 as rainbow, but
- * the pattern shows four bands — red, orange, yellow,
- * green — so blue and magenta sit in the palette
- * without ever appearing in the pattern.
+ * 4 Bands: one band per palette colour (Nov 9, 2026,
+ * Jeremiah — the earlier build used only the first
+ * four colours in 4-row bands, which is wrong: the
+ * panel shows a band for every colour in the palette).
+ * The bands are as even as possible across the 16
+ * rows (16 rows over N colours), scrolling up at 4.5
+ * rows per frame at 50% in preview orientation. The
+ * panel shows them as vertical bands scrolling right.
  */
 function bandsFrames(params: EffectParams, count: number): Grid[] {
   const step = 4.5 * speedFactor(params.speed);
-  const bandColors = params.palette.slice(0, 4);
+  const n = params.palette.length;
   const out: Grid[] = [];
   for (let f = 0; f < count; f++) {
     const offset = f * step;
     const grid = blank();
     for (let r = 0; r < 16; r++) {
-      const band = Math.floor((r + offset) / 4) % bandColors.length;
+      // One band per colour: the row's position
+      // scaled by the colour count, so a 6-colour
+      // palette gives bands 3,3,2,3,3,2 rows wide.
+      const band = Math.floor(((r + offset) * n) / 16) % n;
       const colour =
-        bandColors[
-          ((band % bandColors.length) + bandColors.length) % bandColors.length
-        ] ?? RED;
+        params.palette[((band % n) + n) % n] ?? RED;
       for (let c = 0; c < 16; c++) {
         grid[r * 16 + c] = [...colour] as RGB;
       }
@@ -353,15 +351,38 @@ function diagonalFrames(params: EffectParams, count: number): Grid[] {
 
 /**
  * 6 Rainbow diagonal: diagonal bands in hue order,
- * advancing one band (one hue step) per frame at 50%.
- * Scrolling by one band width is the same look as
- * cycling the hues in place, since the bands are in
- * hue order — the panel video cannot distinguish them,
- * and the phase on device will say which it is. Same
- * mechanism as the plain diagonal, different palette.
+ * with a black band between each colour (Nov 9, 2026,
+ * Jeremiah). The cycle interleaves every palette
+ * colour with black — colour, black, colour, black —
+ * so the stripes read as separate bands, not a
+ * continuous gradient. Advancing one band per frame
+ * at 50%, same mechanism as the plain diagonal.
  */
 function rainbowDiagonalFrames(params: EffectParams, count: number): Grid[] {
-  return diagonalFrames(params, count);
+  const step = 4 * speedFactor(params.speed);
+  // The cycle is each palette colour followed by a
+  // black band: [c0, black, c1, black, ...].
+  const cycle: RGB[] = [];
+  for (const colour of params.palette) {
+    cycle.push(colour, [0, 0, 0]);
+  }
+  const out: Grid[] = [];
+  for (let f = 0; f < count; f++) {
+    const offset = f * step;
+    const grid = blank();
+    for (let r = 0; r < 16; r++) {
+      for (let c = 0; c < 16; c++) {
+        const band =
+          Math.floor((diagonalIndex(r, c) + offset) / 4) % cycle.length;
+        const colour =
+          cycle[((band % cycle.length) + cycle.length) % cycle.length] ??
+          RED;
+        grid[r * 16 + c] = [...colour] as RGB;
+      }
+    }
+    out.push(withBrightness(grid, params.brightness));
+  }
+  return out;
 }
 
 /**
